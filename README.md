@@ -37,7 +37,7 @@ Then for real:
 |--------|-----|
 | `psToDo-HTML-Report.ps1` | Reads objects in db\monitorobjects.json, Tand writes an HTML status page |
 
-![Web dashboard](./img/webdashboard.jpg)
+![Web dashboard](./img/wwebdashboard.jpg)
 
 ## System requirements :
 ### Runtime
