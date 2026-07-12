@@ -1,0 +1,6 @@
+{
+    "AppId" : "-EntraID",
+	"ClientId": "-EntraID",
+	"TenantId": "-EntraID",
+    "CertificateThumbprint": "-SelfSignedCertCertificateThumbprint"
+}
