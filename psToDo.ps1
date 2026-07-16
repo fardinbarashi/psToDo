@@ -9,54 +9,10 @@ Title : psToDo
 Description : This script is designed to send calendar reminders to users based on specific criteria in the monitoring objects file.
 Creates html file for future use to iis.
 Alerts team or user based on the configuration in the monitoring objects file.
-For more information, please visit the GitHub repository: https://github.com/fardinbarashi
+For more information, please visit the GitHub repository: https://github.com/fardinbarashi/psToDo
 
-Alerting rule:
-    An object alerts once per trigger window, not once per trigger day.
-
-    The window opens when daysLeft drops to or below a trigger, and the
-    narrowest open window wins. With triggers 7/15/30:
-
-        daysLeft 30..16 -> the 30-day window
-        daysLeft 15..8  -> the 15-day window
-        daysLeft 7..0   -> the 7-day window
-
-    Files\state\sent-state.json remembers which windows have already been
-    alerted, so each one fires exactly once even if the script runs daily.
-    A missed run is caught up on the next run, which plain -eq matching
-    could never do.
-
-    Two extra cases: the expiry day itself, and a reminder every
-    $expiredNotifyDays once the object has already expired.
-
-    The state key is id_expireDate_trigger. Renewing a certificate changes
-    expireDate, which retires the old keys and re-arms every window.
-
-JSON key note:
-    The trigger keys start with a digit, so PowerShell cannot reach them with
-    plain dot notation - $object.1dateTrigger is a parse error, because 1d is
-    read as a decimal literal. Quoted member access is required throughout:
-    $object.'1dateTrigger', or $object.$key when $key holds the name.
-
-Teams note:
-    Teams goes through a Workflows webhook, not Graph. Posting a channel
-    message with application permissions is a protected API - ChannelMessage.Send
-    is not offered as an app permission without Microsoft's approval.
-    The JSON needs teamWebhookUrl instead of teamId and teamChannelId.
-
-Folder layout:
-    psToDo.ps1
-    CalenderReminderHtmlReport.ps1
-    Settings\Config\MsGraphSettings.json
-    Files\db\monitorobjects.json
-    Files\state\sent-state.json
-    Files\report\
-    Logs\
-
-Version : 3.0
+Version : 1.0
 Release day : 2026-07-10
-Github Link  : https://github.com/fardinbarashi
-News : sent-state.json. One alert per trigger window, missed runs caught up.
 
 #>
 
@@ -95,7 +51,7 @@ param(
 # How often to notify about objects that have already expired
 $expiredNotifyDays = 7
 
-# Transcript. Dashes, not slashes: slashes become directory separators in the file name.
+# Transcript
 $logFileDate       = Get-Date -Format 'yyyy-MM-dd_HH.mm.ss'
 $tranScriptLogFile = "$logFolder\$scriptName - $logFileDate.txt"
 
