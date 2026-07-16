@@ -14,6 +14,21 @@ A PowerShell solution that watches expiry dates in a JSON file and alerts a team
 anything with a deadline. It also renders a self-contained **HTML status dashboard** for IIS.
 Built and tested on **PowerShell 7.3.1 (Core)**.
 The scripts create the folders they need on first run.
+```
+
+                 [ Daily System Run ]
+                           |
+             Does "Days Remaining" match a trigger?
+                    /             \
+               ( Yes )            ( No )
+                 /                   \
+       [ Check Alert Channels ]    [ Standby until tomorrow ]
+         /             \
+  [ Mail = true ]   [ Teams = true ]
+       /                 \
+(Send via Graph)    (Post to Webhook)
+```
+
 
 Always WhatIf-run first. 
 
@@ -206,7 +221,61 @@ below 0 :
 
 
 ## How to add new object to monitor in The db\monitorobjects.json
-`Files\db\monitorobjects.json` is an array of objects:
+`Files\db\monitorobjects.json` is an array of objects that you need do manually add data to.
+
+#### HowTo : 
+
+Step 1: Fill in the Mandatory Core Fields
+```
+These fields set up the baseline monitoring. You must define these first to establish the object 
+ - identity
+  -> id
+  -> name
+ - the deadlines 
+  -> expireDate
+  -> 1dateTrigger 
+  -> 2dateTrigger
+  -> 3dateTrigger 
+
+| `id` | Number
+| `name` | string | Human-readable label shown in mails, Teams cards and the dashboard. |
+| `expireDate` | `yyyy-MM-dd` format
+| `1dateTrigger` | First alert point,
+| `2dateTrigger` | Second alert point
+| `3dateTrigger` | Third alert point
+```
+
+Step 2: Toggle Your Alert Channels (The Switches)
+These boolean toggles act as switches. Setting either to true branches the logic and forces you to configure the corresponding block in Step 3:
+```
+| `notifyMethodbyMail` | boolean | `true` sends mail through Graph. Must be a real boolean, not `"true"` in quotes. 
+| `notifyMethodbyTeams` | boolean | `true` posts to the Teams webhook. Both can be true — the object then alerts on both channels.
+```
+
+Step 3: Fill in the Details for the Activated Channels
+
+Step 3A (Only if notifyMethodbyMail is true):
+You must now provide the email routing details so the system knows how to dispatch the email:
+```
+    "mail": {
+        "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+        "mailSubject": "Wildcard cert lab.local expires soon",
+        "mailBody": "The certificate is approaching its expiry date.",
+        "mailRecipients": [
+            "AdeleV@M365x04357061.OnMicrosoft.com"
+        ]
+    },
+```
+Step 3B (Only if notifyMethodbyTeams is true):
+You must now configure the Teams details so the system can post the alert to your Teams channel:
+```
+    "teams": {
+        "teamSubject": "Wildcard cert lab.local expires soon",
+        "teamBody": "The certificate is approaching its expiry date.",
+        "teamWebhookUrl": "https://outlook.office.com/webhook/..."
+    }
+ }
+```
 
 ### Object field reference
 Every entry in `monitorobjects.json` describes one thing to watch. Fields below in the order they appear.
@@ -214,7 +283,7 @@ Nothing is shared between objects.
 
 | Field | Type | What it is |
 |-------|------|------------|
-| `id` | string | Unique identifier for the object. Used in the state key and in log lines. Must be unique across the file. |
+| `id` | string | Unique identifier for the object. Used in the state key and in log lines. Must be unique across the file, use a number for best interaction. |
 | `name` | string | Human-readable label shown in mails, Teams cards and the dashboard. |
 | `expireDate` | string | The deadline, in `yyyy-MM-dd` format. Everything is calculated from this date. An unparseable value is skipped and the object is left unmonitored. |
 | `template` | string | Free-text tag for what kind of object this is (certificate template, resource type). Shown for context; not used in logic. |
