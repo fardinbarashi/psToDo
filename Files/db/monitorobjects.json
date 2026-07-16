@@ -23,7 +23,7 @@
     "teams": {
       "teamSubject": "Wildcard cert lab.local expires soon",
       "teamBody": "The certificate for web-prod-01.lab.local is approaching its expiry date.",
-      "teamWebhookUrl": "19:wildcardxxxxxxxxxxxxxxxxxxxx@thread.tacv2"
+      "teamWebhookUrl": "19:wildcardxxxxxxxxxxxxxxxxxxxxteamWebhookUrl"
     }
   },
   {
