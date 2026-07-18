@@ -1,6 +1,6 @@
 # psToDo — Calender Reminder
 
-![logo](./img/pstodologo.png) 
+![logo](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/pstodologo.png) 
 
 A PowerShell solution that watches expiry dates in a JSON file and alerts a team by **mail** and **Microsoft Teams** before things lapse 
 
@@ -52,7 +52,7 @@ Then for real:
 |--------|-----|
 | `psToDo-HTML-Report.ps1` | Reads objects in db\monitorobjects.json, Tand writes an HTML status page |
 
-![Web dashboard](./img/wwebdashboard.jpg)
+![Web dashboard](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/wwebdashboard.jpg)
 
 ## System requirements :
 ### Runtime
@@ -87,7 +87,7 @@ Then for real:
 |--------|-----|
 | `psToDo.ps1` | Reads the objects, db\monitorobjects.json, The objects being checked, decides what is due, sends the alerts based on objects configuration |
 
-![PstoDo](./img/pstodo.jpg)
+![PstoDo](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/pstodo.jpg)
 
 ## System requirements :
 ### Runtime
@@ -211,13 +211,13 @@ Example :
 The smallest trigger sits closest to expiry, so it is the most urgent. Every object can have unique triggers and a unique expiry date — nothing is shared between rows.
 Forexample Mail alerts: 
 1dateTrigger : 
-![1dateTrigger Mail1](./img/Mail1.jpg) 
+![1dateTrigger Mail1](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/Mail1.jpg) 
 2dateTrigger : 
-![2dateTrigger Mail2](./img/Mail2.jpg)
+![2dateTrigger Mail2](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/Mail2.jpg)
 3dateTrigger : 
-![3dateTrigger Mail3](./img/Mail3.jpg) 
+![3dateTrigger Mail3](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/Mail3.jpg) 
 below 0 :
-![below 0 Mail4](./img/Mail4.jpg)
+![below 0 Mail4](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/Mail4.jpg)
 
 
 ## How to add new object to monitor in The db\monitorobjects.json
@@ -366,12 +366,6 @@ Files\
 Logs\                              Per-run transcripts
 ```
 
----
-
-
-## Author
-
-Fardin Barashi — https://github.com/fardinbarashi
 
 
 
