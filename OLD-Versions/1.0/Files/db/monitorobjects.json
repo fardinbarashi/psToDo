@@ -1,0 +1,542 @@
+[
+  {
+    "id": "1",
+    "name": "Wildcard cert lab.local - this should be red 1dateTrigger mail",
+    "expireDate": "2025-05-23",
+    "template": "WebServerV2",
+    "servername": "web-prod-01.lab.local",
+    "environment": "prod.local",
+    "description": "Certificate has expired. Renew via internal CA and rebind in IIS. See KB-1101.",
+    "1dateTrigger": 30,
+    "2dateTrigger": 15,	
+    "3dateTrigger": 7,	
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": true,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "Wildcard cert lab.local expires soon",
+      "mailBody": "The certificate for web-prod-01.lab.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "Wildcard cert lab.local expires soon",
+      "teamBody": "The certificate for web-prod-01.lab.local is approaching its expiry date.",
+      "teamWebhookUrl": "19:wildcardxxxxxxxxxxxxxxxxxxxxteamWebhookUrl"
+    }
+  },
+  {
+    "id": "2",
+    "name": "SQL Server AG cert - this should be orange yellow 2dateTrigger mail",
+    "expireDate": "2026-08-27",
+    "template": "SQLServerCert",
+    "servername": "sql-prod-02.lab.local",
+    "environment": "prod.local",
+    "description": "Expired. Availability group encryption is running on a stale cert. Escalate to DBA on-call.",
+    "1dateTrigger": 30,
+    "2dateTrigger": 60,
+    "3dateTrigger": 90,
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": true,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "SQL Server AG cert expires soon",
+      "mailBody": "The certificate for sql-prod-02.lab.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "SQL Server AG cert expires soon",
+      "teamBody": "The certificate for sql-prod-02.lab.local is approaching its expiry date.",
+      "teamWebhookUrl": "19:sqlxxx-teamWebhookUrl"
+    }
+  },
+  {
+    "id": "3",
+    "name": "Entra ID SAML signing",
+    "expireDate": "2026-09-26",
+    "template": "SAMLSigning",
+    "servername": "sts.lab.local",
+    "environment": "prod.local",
+    "description": "Expired three days ago. Roll the signing certificate in Entra ID and update the SP metadata.",
+    "1dateTrigger": 14,
+    "2dateTrigger": 30,
+    "3dateTrigger": 60,
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": true,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "Entra ID SAML signing expires soon",
+      "mailBody": "The certificate for sts.lab.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "Entra ID SAML signing expires soon",
+      "teamBody": "The certificate for sts.lab.local is approaching its expiry date.",
+      "teamWebhookUrl": "19:entrax-teamWebhookUrl"
+    }
+  },
+  {
+    "id": "4",
+    "name": "Exchange transport TLS - this should be green -  - this should be green 3dateTrigger mail",
+    "expireDate": "2026-08-27",
+    "template": "ExchangeTLS",
+    "servername": "mail-01.lab.local",
+    "environment": "prod.local",
+    "description": "Renew and assign to the SMTP service. Restart the transport service during the change window.",
+    "1dateTrigger": 7,
+    "2dateTrigger": 14,
+    "3dateTrigger": 30,
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": true,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "Exchange transport TLS expires soon",
+      "mailBody": "The certificate for mail-01.lab.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "Exchange transport TLS expires soon",
+      "teamBody": "The certificate for mail-01.lab.local is approaching its expiry date.",
+      "teamWebhookUrl": "teamWebhookUrl"
+    }
+  },
+  {
+    "id": "5",
+    "name": "VPN gateway cert",
+    "expireDate": "2026-07-14",
+    "template": "VPNGateway",
+    "servername": "vpn-gw-01.lab.local",
+    "environment": "dmz.local",
+    "description": "Renew via public CA. Coordinate with the network team before installing.",
+    "1dateTrigger": 7,
+    "2dateTrigger": 21,
+    "3dateTrigger": 45,
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": true,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "VPN gateway cert expires soon",
+      "mailBody": "The certificate for vpn-gw-01.lab.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "VPN gateway cert expires soon",
+      "teamBody": "The certificate for vpn-gw-01.lab.local is approaching its expiry date.",
+      "teamWebhookUrl": "19:vpnxxx-teamWebhookUrl"
+    }
+  },
+  {
+    "id": "6",
+    "name": "RADIUS NPS server cert",
+    "expireDate": "2026-07-16",
+    "template": "NPSServer",
+    "servername": "nps-01.lab.local",
+    "environment": "prod.local",
+    "description": "Renew from internal CA. 802.1X will fail silently for wireless clients if this lapses.",
+    "1dateTrigger": 7,
+    "2dateTrigger": 15,
+    "3dateTrigger": 30,
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": false,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "RADIUS NPS server cert expires soon",
+      "mailBody": "The certificate for nps-01.lab.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "RADIUS NPS server cert expires soon",
+      "teamBody": "The certificate for nps-01.lab.local is approaching its expiry date.",
+      "teamWebhookUrl": "19:radius-teamWebhookUrl"
+    }
+  },
+  {
+    "id": "7",
+    "name": "Domain controller LDAPS",
+    "expireDate": "2026-07-20",
+    "template": "DomainController",
+    "servername": "dc-03.lab.local",
+    "environment": "prod.local",
+    "description": "Auto-enrollment should handle this. Verify it did, otherwise request manually.",
+    "1dateTrigger": 7,
+    "2dateTrigger": 15,
+    "3dateTrigger": 30,
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": true,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "Domain controller LDAPS expires soon",
+      "mailBody": "The certificate for dc-03.lab.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "Domain controller LDAPS expires soon",
+      "teamBody": "The certificate for dc-03.lab.local is approaching its expiry date.",
+      "teamWebhookUrl": "19:domain-teamWebhookUrl"
+    }
+  },
+  {
+    "id": "8",
+    "name": "Code signing cert",
+    "expireDate": "2026-07-23",
+    "template": "CodeSigning",
+    "servername": "build-01.lab.local",
+    "environment": "build.local",
+    "description": "Renew the EV code signing certificate. The HSM token must be present during CSR generation.",
+    "1dateTrigger": 14,
+    "2dateTrigger": 30,
+    "3dateTrigger": 90,
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": false,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "Code signing cert expires soon",
+      "mailBody": "The certificate for build-01.lab.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "Code signing cert expires soon",
+      "teamBody": "The certificate for build-01.lab.local is approaching its expiry date.",
+      "teamWebhookUrl": "19:codexx-teamWebhookUrl"
+    }
+  },
+  {
+    "id": "9",
+    "name": "Intune SCEP NDES",
+    "expireDate": "2026-07-24",
+    "template": "NDESServer",
+    "servername": "ndes-01.lab.local",
+    "environment": "prod.local",
+    "description": "Renew the NDES registration authority certificate. Device enrollment stops without it.",
+    "1dateTrigger": 15,
+    "2dateTrigger": 30,
+    "3dateTrigger": 60,
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": true,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "Intune SCEP NDES expires soon",
+      "mailBody": "The certificate for ndes-01.lab.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "Intune SCEP NDES expires soon",
+      "teamBody": "The certificate for ndes-01.lab.local is approaching its expiry date.",
+      "teamWebhookUrl": "19:intune-teamWebhookUrl"
+    }
+  },
+  {
+    "id": "10",
+    "name": "API gateway TLS",
+    "expireDate": "2026-07-28",
+    "template": "APIGateway",
+    "servername": "api-gw-01.lab.local",
+    "environment": "dmz.local",
+    "description": "Public cert from external CA. Order at least ten working days before expiry.",
+    "1dateTrigger": 21,
+    "2dateTrigger": 45,
+    "3dateTrigger": 90,
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": true,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "API gateway TLS expires soon",
+      "mailBody": "The certificate for api-gw-01.lab.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "API gateway TLS expires soon",
+      "teamBody": "The certificate for api-gw-01.lab.local is approaching its expiry date.",
+      "teamWebhookUrl": "19:apixxx-teamWebhookUrl"
+    }
+  },
+  {
+    "id": "11",
+    "name": "Backup agent cert",
+    "expireDate": "2026-08-01",
+    "template": "BackupAgent",
+    "servername": "veeam-01.lab.local",
+    "environment": "prod.local",
+    "description": "Renew and redistribute to all protected hosts. Verify a test restore afterwards.",
+    "1dateTrigger": 15,
+    "2dateTrigger": 30,
+    "3dateTrigger": 60,
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": false,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "Backup agent cert expires soon",
+      "mailBody": "The certificate for veeam-01.lab.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "Backup agent cert expires soon",
+      "teamBody": "The certificate for veeam-01.lab.local is approaching its expiry date.",
+      "teamWebhookUrl": "19:backup-teamWebhookUrl"
+    }
+  },
+  {
+    "id": "12",
+    "name": "Jenkins agent mTLS",
+    "expireDate": "2026-08-04",
+    "template": "JenkinsAgent",
+    "servername": "jenkins-01.build.local",
+    "environment": "build.local",
+    "description": "Rotate the mutual TLS certificate for the controller-to-agent channel.",
+    "1dateTrigger": 14,
+    "2dateTrigger": 30,
+    "3dateTrigger": 60,
+    "notifyMethodbyMail": false,
+    "notifyMethodbyTeams": true,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "Jenkins agent mTLS expires soon",
+      "mailBody": "The certificate for jenkins-01.build.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "Jenkins agent mTLS expires soon",
+      "teamBody": "The certificate for jenkins-01.build.local is approaching its expiry date.",
+      "teamWebhookUrl": "19:jenkinsxxxxxxxxxxxxxxxxxxxxx@thread.tacv2"
+    }
+  },
+  {
+    "id": "13",
+    "name": "Grafana ingress cert",
+    "expireDate": "2026-08-07",
+    "template": "IngressTLS",
+    "servername": "grafana.lab.local",
+    "environment": "test.local",
+    "description": "Managed by cert-manager. Confirm the ACME renewal is not stuck before intervening.",
+    "1dateTrigger": 15,
+    "2dateTrigger": 30,
+    "3dateTrigger": 45,
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": false,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "Grafana ingress cert expires soon",
+      "mailBody": "The certificate for grafana.lab.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "Grafana ingress cert expires soon",
+      "teamBody": "The certificate for grafana.lab.local is approaching its expiry date.",
+      "teamWebhookUrl": "19:grafanaxxxxxxxxxxxxxxxxxxxxx@thread.tacv2"
+    }
+  },
+  {
+    "id": "14",
+    "name": "A-Webserver test cert",
+    "expireDate": "2026-08-11",
+    "template": "A-webserver",
+    "servername": "A-Webserver.lab.local",
+    "environment": "test.local",
+    "description": "Test environment certificate. Renew from internal CA when convenient.",
+    "1dateTrigger": 15,
+    "2dateTrigger": 17,
+    "3dateTrigger": 30,
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": true,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "A-Webserver test cert expires soon",
+      "mailBody": "The certificate for A-Webserver.lab.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "A-Webserver test cert expires soon",
+      "teamBody": "The certificate for A-Webserver.lab.local is approaching its expiry date.",
+      "teamWebhookUrl": "19:a-webserxxxxxxxxxxxxxxxxxxxx@thread.tacv2"
+    }
+  },
+  {
+    "id": "15",
+    "name": "Root CA cross-sign",
+    "expireDate": "2026-08-24",
+    "template": "RootCA",
+    "servername": "ca-root-01.lab.local",
+    "environment": "prod.local",
+    "description": "Cross-signed intermediate expires. Plan the transition at least a month out.",
+    "1dateTrigger": 30,
+    "2dateTrigger": 60,
+    "3dateTrigger": 120,
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": true,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "Root CA cross-sign expires soon",
+      "mailBody": "The certificate for ca-root-01.lab.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "Root CA cross-sign expires soon",
+      "teamBody": "The certificate for ca-root-01.lab.local is approaching its expiry date.",
+      "teamWebhookUrl": "19:rootxx-teamWebhookUrl"
+    }
+  },
+  {
+    "id": "16",
+    "name": "Azure AD app secret",
+    "expireDate": "2026-09-05",
+    "template": "AppRegistration",
+    "servername": "graph-connector",
+    "environment": "prod.local",
+    "description": "Client secret for the Graph connector. Generate a new one and update Key Vault.",
+    "1dateTrigger": 30,
+    "2dateTrigger": 60,
+    "3dateTrigger": 90,
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": true,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "Azure AD app secret expires soon",
+      "mailBody": "The certificate for graph-connector is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "Azure AD app secret expires soon",
+      "teamBody": "The certificate for graph-connector is approaching its expiry date.",
+      "teamWebhookUrl": "19:azurex-teamWebhookUrl"
+    }
+  },
+  {
+    "id": "17",
+    "name": "SFTP host key rotation",
+    "expireDate": "2026-09-21",
+    "template": "SFTPServer",
+    "servername": "sftp-01.dmz.local",
+    "environment": "dmz.local",
+    "description": "Scheduled host key rotation. Notify all partners four weeks in advance.",
+    "1dateTrigger": 30,
+    "2dateTrigger": 45,
+    "3dateTrigger": 90,
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": false,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "SFTP host key rotation expires soon",
+      "mailBody": "The certificate for sftp-01.dmz.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "SFTP host key rotation expires soon",
+      "teamBody": "The certificate for sftp-01.dmz.local is approaching its expiry date.",
+      "teamWebhookUrl": "19:sftpxx-teamWebhookUrl"
+    }
+  },
+  {
+    "id": "18",
+    "name": "Terraform Cloud token",
+    "expireDate": "2026-10-08",
+    "template": "ServiceToken",
+    "servername": "tfc-workspace-prod",
+    "environment": "prod.local",
+    "description": "API token expires. Rotate in Terraform Cloud and update the CI secret store.",
+    "1dateTrigger": 30,
+    "2dateTrigger": 60,
+    "3dateTrigger": 90,
+    "notifyMethodbyMail": false,
+    "notifyMethodbyTeams": true,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "Terraform Cloud token expires soon",
+      "mailBody": "The certificate for tfc-workspace-prod is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "Terraform Cloud token expires soon",
+      "teamBody": "The certificate for tfc-workspace-prod is approaching its expiry date.",
+      "teamWebhookUrl": "19:terraforxxxxxxxxxxxxxxxxxxxx@thread.tacv2"
+    }
+  },
+  {
+    "id": "19",
+    "name": "Load balancer SSL profile",
+    "expireDate": "2026-11-04",
+    "template": "LoadBalancer",
+    "servername": "f5-01.dmz.local",
+    "environment": "dmz.local",
+    "description": "SSL profile certificate. Order the replacement in good time; the CA takes a week.",
+    "1dateTrigger": 30,
+    "2dateTrigger": 60,
+    "3dateTrigger": 90,
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": true,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "Load balancer SSL profile expires soon",
+      "mailBody": "The certificate for f5-01.dmz.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "Load balancer SSL profile expires soon",
+      "teamBody": "The certificate for f5-01.dmz.local is approaching its expiry date.",
+      "teamWebhookUrl": "19:loadxx-teamWebhookUrl"
+    }
+  },
+  {
+    "id": "20",
+    "name": "Archive share cert",
+    "expireDate": "2027-01-28",
+    "template": "FileServer",
+    "servername": "archive-01.lab.local",
+    "environment": "test.local",
+    "description": "Low priority. Renew whenever the next maintenance window comes around.",
+    "1dateTrigger": 30,
+    "2dateTrigger": 60,
+    "3dateTrigger": 90,
+    "notifyMethodbyMail": true,
+    "notifyMethodbyTeams": false,
+    "mail": {
+      "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
+      "mailSubject": "Archive share cert expires soon",
+      "mailBody": "The certificate for archive-01.lab.local is approaching its expiry date.",
+      "mailRecipients": [
+        "AdeleV@M365x04357061.OnMicrosoft.com"
+      ]
+    },
+    "teams": {
+      "teamSubject": "Archive share cert expires soon",
+      "teamBody": "The certificate for archive-01.lab.local is approaching its expiry date.",
+      "teamWebhookUrl": "19:archivexxxxxxxxxxxxxxxxxxxxx@thread.tacv2"
+    }
+  }
+]
