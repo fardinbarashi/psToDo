@@ -365,7 +365,15 @@ Files\
 
 Logs\                              Per-run transcripts
 ```
+---
 
+## Roadmap
+
+```
+Plugin folder : -->
+-- : Add, To automatically sync and track change notifications from your Message Center
+-- : Add, To automatically sync cert
+```
 
 
 
