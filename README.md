@@ -1,4 +1,4 @@
-# psToDo — Calender Reminder
+# psToDo — Calender Reminder 1.1
 
 ![logo](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/pstodologo.png) 
 
@@ -14,6 +14,25 @@ A PowerShell solution that watches expiry dates in a JSON file and alerts a team
 anything with a deadline. It also renders a self-contained **HTML status dashboard** for IIS.
 Built and tested on **PowerShell 7.3.1 (Core)**.
 The scripts create the folders they need on first run.
+
+## Table of Contents
+
+- [What's new](#whats-new)
+- [psToDo-HTML-Report](#pstodo-html-report)
+- [System requirements (HTML Report)](#system-requirements-html-report)
+- [psToDo](#pstodo)
+- [System requirements (psToDo)](#system-requirements-pstodo)
+- [Teams webhook (optional)](#teams-webhook-optional)
+- [How alerting works](#how-alerting-works)
+- [How to add a new object to monitor](#how-to-add-new-object-to-monitor-in-the-dbmonitorobjectsjson)
+- [Entra ID app registration importer (plugin)](#entra-id-app-registration-importer-plugin)
+- [Repository layout](#repository-layout)
+- [Roadmap](#roadmap)
+
+## What's new
+
+**Entra ID app registration importer (plugin)** — a new script, `Settings\plugin\Import-EntraAppRegistrations.ps1`, reads client secrets and certificates from every app registration in the tenant via Microsoft Graph and merges their expiry dates into `Files\db\monitorobjects.json`. App-registration credentials are now tracked automatically instead of being added by hand. It backs up the database first, never overwrites existing objects, and re-runs are idempotent. See [Entra ID app registration importer (plugin)](#entra-id-app-registration-importer-plugin).
+
 ```
 
                  [ Daily System Run ]
@@ -54,7 +73,7 @@ Then for real:
 
 ![Web dashboard](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/wwebdashboard.jpg)
 
-## System requirements :
+## System requirements (HTML Report)
 ### Runtime
 ```
 | Requirement | Detail |
@@ -89,7 +108,7 @@ Then for real:
 
 ![PstoDo](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/pstodo.jpg)
 
-## System requirements :
+## System requirements (psToDo)
 ### Runtime
 ```
 | Requirement | Detail |
@@ -326,6 +345,48 @@ Renewing a certificate changes its `expireDate`, which changes the key prefix, r
 Two extra cases are handled: the **expiry day** itself, and a **recurring reminder** once an object has already expired.
 ---
 
+## Entra ID app registration importer (plugin)
+
+| Script | Job |
+|--------|-----|
+| `Settings\plugin\Import-EntraAppRegistrations.ps1` | Reads app registration credentials (client secrets **and** certificates) from Entra ID via Microsoft Graph and merges their expiry dates into `Files\db\monitorobjects.json` |
+
+App registration secrets and certificates expire like everything else, but adding each one to `monitorobjects.json` by hand is tedious. This plugin pulls them straight from the tenant: every `passwordCredential` (client secret) and `keyCredential` (certificate) on every app registration becomes one monitored object.
+
+Fields Entra provides map directly:
+
+- `name`       ← app display name + credential display name
+- `expireDate` ← the credential `endDateTime` (`yyyy-MM-dd`)
+- `servername` ← the app's Application (client) ID
+
+Everything Entra cannot supply (`template`, `environment`, `description`, the three triggers, `mail`, `teams`) comes from the template `Settings\plugin\entra-app-defaults.json`. The tokens `{{name}}`, `{{expireDate}}`, `{{servername}}` and `{{environment}}` are substituted per object, so defaults live in one JSON file instead of in the code.
+
+**It never overwrites your data.** Before writing it takes a timestamped backup of `monitorobjects.json` into `Files\backup\psToDo\`. Existing/manual objects are left untouched; objects it imported before (matched on `entraKeyId`) get only their `expireDate` refreshed; brand-new credentials are appended with a fresh `id`. Imported objects carry two extra fields, `source` and `entraKeyId`, so re-runs are idempotent. The other scripts ignore unknown fields, so this stays compatible.
+
+### Graph permission
+This reads app registrations, so the app needs the **application permission `Application.Read.All`** with admin consent — in addition to the `Mail.Send` the main script uses. Add it to the same app registration in Entra → API permissions → Grant admin consent. Authentication reuses the existing certificate flow (`Settings\Config\MsGraphSettings.json` + `Connect-CalenderReminderGraph`).
+
+### Run it
+Always WhatIf-run first.
+
+```powershell
+# Lab test — built-in sample data, no tenant needed:
+.\Settings\plugin\Import-EntraAppRegistrations.ps1 -UseMockData -WhatIf
+.\Settings\plugin\Import-EntraAppRegistrations.ps1 -UseMockData
+
+# Live against the tenant:
+.\Settings\plugin\Import-EntraAppRegistrations.ps1 -WhatIf
+.\Settings\plugin\Import-EntraAppRegistrations.ps1
+```
+
+| Switch | Effect |
+|--------|--------|
+| `-UseMockData` | Skip Graph and use built-in sample credentials — test backup/merge with no tenant. |
+| `-NoDateRefresh` | Do not update `expireDate` on already-imported objects. |
+| `-WhatIf` | Show what would change without writing (nothing is backed up or saved). |
+
+---
+
 ## Repository layout
 
 ```
@@ -354,8 +415,11 @@ Settings\                          Functions to script
 
 Settings\
   Config\
-    - MsGraphSettings.json           Tenant, app and certificate for mail
+    - MsGraphSettings.json           Tenant, app and certificate for mail (+ Application.Read.All for the importer)
     - ScriptSettings.json            Script-level settings
+  plugin\
+    - Import-EntraAppRegistrations.ps1   Import Entra app-reg secret & cert expiry into monitorobjects.json
+    - entra-app-defaults.json            Default field values for imported objects
   
 Files\
   db\monitorobjects.json           The objects being watched
@@ -371,8 +435,9 @@ Logs\                              Per-run transcripts
 
 ```
 Plugin folder : -->
--- : Add, To automatically sync and track change notifications from your Message Center
--- : Add, To automatically sync cert
+[x] Added : Import-EntraAppRegistrations — sync app registration secret & certificate expiry from Entra ID
+[ ] Add   : Automatically sync and track change notifications from your Message Center
+[ ] Add   : Automatically sync certificates
 ```
 
 
