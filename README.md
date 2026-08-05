@@ -30,8 +30,11 @@ The scripts create the folders they need on first run.
 - [Roadmap](#roadmap)
 
 ## What's new
-
-**Entra ID app registration importer (plugin)** — a new script, `Settings\plugin\Import-EntraAppRegistrations.ps1`, reads client secrets and certificates from every app registration in the tenant via Microsoft Graph and merges their expiry dates into `Files\db\monitorobjects.json`. App-registration credentials are now tracked automatically instead of being added by hand. It backs up the database first, never overwrites existing objects, and re-runs are idempotent. See [Entra ID app registration importer (plugin)](#entra-id-app-registration-importer-plugin).
+[x] Added : Import-EntraAppRegistrations — sync app registration secret & certificate expiry from Entra ID ->
+**Entra ID app registration importer (plugin)** — a new script, `Settings\plugin\Import-EntraAppRegistrations.ps1`, reads client secrets and certificates from every app registration in the tenant via Microsoft Graph and merges their expiry dates into `Files\db\monitorobjects.json`. 
+App-registration credentials are now tracked automatically instead of being added by hand. 
+It backs up the json database first, never overwrites existing objects, 
+See [Entra ID app registration importer (plugin)](#entra-id-app-registration-importer-plugin).
 
 ```
 
@@ -435,7 +438,6 @@ Logs\                              Per-run transcripts
 
 ```
 Plugin folder : -->
-[x] Added : Import-EntraAppRegistrations — sync app registration secret & certificate expiry from Entra ID
 [ ] Add   : Automatically sync and track change notifications from your Message Center
 [ ] Add   : Automatically sync certificates
 ```
