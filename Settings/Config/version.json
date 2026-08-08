@@ -1,6 +1,7 @@
 {
-    "version" : "1.1",
-	"githublink": "https://github.com/fardinbarashi/psToDo",
-	"Linkdin": "https://www.linkedin.com/in/fardin-barashi-a56310a2/",
+    "version": "1.2",
+    "Changes": "Added a Status column (Backlog/Active/Completed) to the HTML report; Message Center rows now carry a severity badge and an admin-center link.",
+    "githublink": "https://github.com/fardinbarashi/psToDo",
+    "Linkdin": "https://www.linkedin.com/in/fardin-barashi-a56310a2/",
     "Contact": "https://www.linkedin.com/in/fardin-barashi-a56310a2/"
 }

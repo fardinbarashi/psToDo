@@ -1,6 +1,6 @@
 {
-    "AppId" : "-EntraID",
-	"ClientId": "-EntraID",
-	"TenantId": "-EntraID",
-    "CertificateThumbprint": "-SelfSignedCertCertificateThumbprint"
+    "AppId": "Application (client) ID — App registration → Overview → Application (client) ID",
+    "ClientId": "Same value as AppId (Application client ID) — same place, copy the same GUID",
+    "TenantId": "Directory (tenant) ID — App registration → Overview → Directory (tenant) ID",
+    "CertificateThumbprint": "Certificate thumbprint — App registration → Certificates & secrets → Certificates tab → Thumbprint column (same value $cert.Thumbprint returned when you created the cert)"
 }

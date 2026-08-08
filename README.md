@@ -1,4 +1,4 @@
-# psToDo — Calender Reminder 1.1
+# psToDo — Calender Reminder
 
 ![logo](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/pstodologo.png) 
 
@@ -22,19 +22,32 @@ The scripts create the folders they need on first run.
 - [System requirements (HTML Report)](#system-requirements-html-report)
 - [psToDo](#pstodo)
 - [System requirements (psToDo)](#system-requirements-pstodo)
+- [API permissions (all features)](#api-permissions-all-features)
 - [Teams webhook (optional)](#teams-webhook-optional)
 - [How alerting works](#how-alerting-works)
 - [How to add a new object to monitor](#how-to-add-new-object-to-monitor-in-the-dbmonitorobjectsjson)
 - [Entra ID app registration importer (plugin)](#entra-id-app-registration-importer-plugin)
+- [Microsoft 365 Message Center importer (plugin)](#microsoft-365-message-center-importer-plugin)
 - [Repository layout](#repository-layout)
 - [Roadmap](#roadmap)
 
 ## What's new
+<<<<<<< Updated upstream
 [x] Added : Import-EntraAppRegistrations — sync app registration secret & certificate expiry from Entra ID ->
 **Entra ID app registration importer (plugin)** — a new script, `Settings\plugin\Import-EntraAppRegistrations.ps1`, reads client secrets and certificates from every app registration in the tenant via Microsoft Graph and merges their expiry dates into `Files\db\monitorobjects.json`. 
 App-registration credentials are now tracked automatically instead of being added by hand. 
 It backs up the json database first, never overwrites existing objects, 
 See [Entra ID app registration importer (plugin)](#entra-id-app-registration-importer-plugin).
+=======
+
+**Version 1.2** — the HTML report has a new **Status** column (Backlog / Active / Completed) with coloured badges, and Message Center rows now carry a **severity** badge and a clickable **admin-center link**. Both importers bumped to v1.1.
+
+**Version 1.1** — added the `Settings\plugin` importers for Entra app registrations and Microsoft 365 Message Center. Each plugin ships as a versioned script with its own `config\version.json` (version + a short `Changes` note).
+
+**Entra ID app registration importer (plugin)** — a new script, `Settings\plugin\Import-EntraAppRegistrations-v1.1.ps1`, reads client secrets and certificates from every app registration in the tenant via Microsoft Graph and merges their expiry dates into `Files\db\monitorobjects.json`. App-registration credentials are now tracked automatically instead of being added by hand. It backs up the database first, never overwrites existing objects, and re-runs are idempotent. See [Entra ID app registration importer (plugin)](#entra-id-app-registration-importer-plugin).
+
+**Microsoft 365 Message Center importer (plugin)** — a new script, `Settings\plugin\Import-M365MessageCenter-v1.1.ps1`, reads Message Center advisories via Microsoft Graph and merges the ones that carry a deadline (`actionRequiredByDateTime`) into `Files\db\monitorobjects.json`, so upcoming Microsoft 365 changes with a hard deadline are tracked alongside everything else. Same backup-first, merge-not-overwrite, idempotent behaviour. See [Microsoft 365 Message Center importer (plugin)](#microsoft-365-message-center-importer-plugin).
+>>>>>>> Stashed changes
 
 ```
 
@@ -213,6 +226,20 @@ The policy can take up to 30 minutes to apply.
 
 ---
 
+## API permissions (all features)
+
+Every Graph permission the tool uses is an **Application** permission (app-only certificate auth, no signed-in user) and requires **admin consent**. Add them under **App registration → API permissions → Microsoft Graph → Application permissions**, then click **Grant admin consent**.
+
+| Permission | Type | Needed for |
+|------------|------|------------|
+| `Mail.Send` | Application | `psToDo.ps1` — send alert mail via Graph |
+| `Application.Read.All` | Application | `Import-EntraAppRegistrations` — read app registration secrets & certificates |
+| `ServiceMessage.Read.All` | Application | `Import-M365MessageCenter` — read Message Center advisories |
+
+Teams alerts need no Graph permission — they post to a Workflows webhook. If the **Type** column shows *Delegated* instead of *Application*, Graph returns `403` at run time.
+
+---
+
 ## Teams webhook (optional)
 Teams alerts use a **Workflows (Power Automate) webhook**, not Graph. App-only posting to a channel is a protected Graph API that needs Microsoft approval; the webhook needs none.
 In the target channel: **Manage channel → Workflows →** *"Post to a channel when a webhook request is received"* → copy the `https://` URL into each object's `teamWebhookUrl`.
@@ -352,7 +379,7 @@ Two extra cases are handled: the **expiry day** itself, and a **recurring remind
 
 | Script | Job |
 |--------|-----|
-| `Settings\plugin\Import-EntraAppRegistrations.ps1` | Reads app registration credentials (client secrets **and** certificates) from Entra ID via Microsoft Graph and merges their expiry dates into `Files\db\monitorobjects.json` |
+| `Settings\plugin\Import-EntraAppRegistrations-v1.1.ps1` | Reads app registration credentials (client secrets **and** certificates) from Entra ID via Microsoft Graph and merges their expiry dates into `Files\db\monitorobjects.json` |
 
 App registration secrets and certificates expire like everything else, but adding each one to `monitorobjects.json` by hand is tedious. This plugin pulls them straight from the tenant: every `passwordCredential` (client secret) and `keyCredential` (certificate) on every app registration becomes one monitored object.
 
@@ -362,7 +389,9 @@ Fields Entra provides map directly:
 - `expireDate` ← the credential `endDateTime` (`yyyy-MM-dd`)
 - `servername` ← the app's Application (client) ID
 
-Everything Entra cannot supply (`template`, `environment`, `description`, the three triggers, `mail`, `teams`) comes from the template `Settings\plugin\entra-app-defaults.json`. The tokens `{{name}}`, `{{expireDate}}`, `{{servername}}` and `{{environment}}` are substituted per object, so defaults live in one JSON file instead of in the code.
+Everything Entra cannot supply (`template`, `environment`, `description`, the three triggers, `mail`, `teams`) comes from the template `Settings\plugin\entra\config\entra-app-defaults.json`. The tokens `{{name}}`, `{{expireDate}}`, `{{servername}}` and `{{environment}}` are substituted per object, so defaults live in one JSON file instead of in the code.
+
+The plugin has its own version file, `Settings\plugin\entra\config\version.json` (`Entraversion` + a short `Changes` note), printed at the top of each run. On a new version, bump `Entraversion` and set `Changes` to a short line describing what changed.
 
 **It never overwrites your data.** Before writing it takes a timestamped backup of `monitorobjects.json` into `Files\backup\psToDo\`. Existing/manual objects are left untouched; objects it imported before (matched on `entraKeyId`) get only their `expireDate` refreshed; brand-new credentials are appended with a fresh `id`. Imported objects carry two extra fields, `source` and `entraKeyId`, so re-runs are idempotent. The other scripts ignore unknown fields, so this stays compatible.
 
@@ -374,17 +403,67 @@ Always WhatIf-run first.
 
 ```powershell
 # Lab test — built-in sample data, no tenant needed:
-.\Settings\plugin\Import-EntraAppRegistrations.ps1 -UseMockData -WhatIf
-.\Settings\plugin\Import-EntraAppRegistrations.ps1 -UseMockData
+.\Settings\plugin\Import-EntraAppRegistrations-v1.1.ps1 -UseMockData -WhatIf
+.\Settings\plugin\Import-EntraAppRegistrations-v1.1.ps1 -UseMockData
 
 # Live against the tenant:
-.\Settings\plugin\Import-EntraAppRegistrations.ps1 -WhatIf
-.\Settings\plugin\Import-EntraAppRegistrations.ps1
+.\Settings\plugin\Import-EntraAppRegistrations-v1.1.ps1 -WhatIf
+.\Settings\plugin\Import-EntraAppRegistrations-v1.1.ps1
 ```
 
 | Switch | Effect |
 |--------|--------|
 | `-UseMockData` | Skip Graph and use built-in sample credentials — test backup/merge with no tenant. |
+| `-NoDateRefresh` | Do not update `expireDate` on already-imported objects. |
+| `-WhatIf` | Show what would change without writing (nothing is backed up or saved). |
+
+---
+
+## Microsoft 365 Message Center importer (plugin)
+
+| Script | Job |
+|--------|-----|
+| `Settings\plugin\Import-M365MessageCenter-v1.1.ps1` | Reads Microsoft 365 Message Center advisories via Microsoft Graph and merges the ones that carry a deadline into `Files\db\monitorobjects.json` |
+
+Microsoft 365 announces upcoming changes, retirements and required actions in the Message Center. Some of those advisories come with a hard deadline. This plugin pulls them from the tenant so they land in the same watch list as your certificates and secrets.
+
+It reads every service announcement message and keeps **only the ones that have an `actionRequiredByDateTime`** — a real deadline. That date becomes the object's `expireDate`. No service or severity filter is applied; every advisory with a deadline is imported.
+
+Fields the Message Center provides map directly:
+
+- `name`        ← message id + title (e.g. `MC100001 - Retirement: Legacy connector is being removed`)
+- `expireDate`  ← the advisory `actionRequiredByDateTime` (`yyyy-MM-dd`)
+- `servername`  ← the affected services
+- `severity`    ← the advisory severity (`normal` / `high` / `critical`) — shown as a coloured badge in the HTML report
+- `messageLink` ← a deep link to the message in the Microsoft 365 admin center, built from the message id (Graph has no link field), rendered as a clickable "Open in admin center" link in the report
+
+Note: the Message Center **release status** (Scheduled / Rolling out / Launched) and the **High / Medium / Low relevance** shown in the admin center are not exposed by Microsoft Graph, so they cannot be imported. `severity` is the closest signal Graph provides.
+
+Everything the Message Center cannot supply (`template`, `environment`, `description`, the three triggers, `mail`, `teams`) comes from the template `Settings\plugin\messagecenter\config\messagecenter-defaults.json`. The tokens `{{name}}`, `{{expireDate}}`, `{{servername}}`, `{{environment}}`, `{{messageId}}`, `{{category}}` and `{{severity}}` are substituted per object. Fill in your own `mailSender`, `mailRecipients` (and `teamWebhookUrl` if you want Teams) once in that file — those are the values Graph does not give you. The template is used only at import time, never when alerts are sent.
+
+The plugin has its own version file, `Settings\plugin\messagecenter\config\version.json` (`MessageCenterversion` + a short `Changes` note), printed at the top of each run. On a new version, bump `MessageCenterversion` and set `Changes` to a short line describing what changed.
+
+**It never overwrites your data.** Before writing it takes a timestamped backup of `monitorobjects.json` into `Files\backup\psToDo\`. Existing/manual objects are left untouched; advisories imported before (matched on `messageId`) get only their `expireDate` refreshed; brand-new advisories are appended with a fresh `id`. Imported objects carry two extra fields, `source` and `messageId`, so re-runs are idempotent.
+
+### Graph permission
+This reads the Message Center, so the app needs the **application permission `ServiceMessage.Read.All`** with admin consent — in addition to the `Mail.Send` the main script uses. Add it to the same app registration in Entra → API permissions → Grant admin consent. Authentication reuses the existing certificate flow (`Settings\Config\MsGraphSettings.json` + `Connect-CalenderReminderGraph`).
+
+### Run it
+Always WhatIf-run first.
+
+```powershell
+# Lab test — built-in sample advisories, no tenant needed:
+.\Settings\plugin\Import-M365MessageCenter-v1.1.ps1 -UseMockData -WhatIf
+.\Settings\plugin\Import-M365MessageCenter-v1.1.ps1 -UseMockData
+
+# Live against the tenant:
+.\Settings\plugin\Import-M365MessageCenter-v1.1.ps1 -WhatIf
+.\Settings\plugin\Import-M365MessageCenter-v1.1.ps1
+```
+
+| Switch | Effect |
+|--------|--------|
+| `-UseMockData` | Skip Graph and use built-in sample advisories — test backup/merge with no tenant. |
 | `-NoDateRefresh` | Do not update `expireDate` on already-imported objects. |
 | `-WhatIf` | Show what would change without writing (nothing is backed up or saved). |
 
@@ -421,8 +500,14 @@ Settings\
     - MsGraphSettings.json           Tenant, app and certificate for mail (+ Application.Read.All for the importer)
     - ScriptSettings.json            Script-level settings
   plugin\
-    - Import-EntraAppRegistrations.ps1   Import Entra app-reg secret & cert expiry into monitorobjects.json
-    - entra-app-defaults.json            Default field values for imported objects
+    - Import-EntraAppRegistrations-v1.1.ps1   Import Entra app-reg secret & cert expiry into monitorobjects.json
+    - Import-M365MessageCenter-v1.1.ps1       Import Message Center advisories (with a deadline) into monitorobjects.json
+    entra\config\
+      - entra-app-defaults.json          Default field values for Entra-imported objects
+      - version.json                     Entra plugin version + change note
+    messagecenter\config\
+      - messagecenter-defaults.json      Default field values for Message Center-imported objects
+      - version.json                     Message Center plugin version + change note
   
 Files\
   db\monitorobjects.json           The objects being watched
@@ -438,7 +523,12 @@ Logs\                              Per-run transcripts
 
 ```
 Plugin folder : -->
+<<<<<<< Updated upstream
 [ ] Add   : Automatically sync and track change notifications from your Message Center
+=======
+[x] Added : Import-EntraAppRegistrations — sync app registration secret & certificate expiry from Entra ID
+[x] Added : Import-M365MessageCenter — sync Message Center advisories that carry a deadline
+>>>>>>> Stashed changes
 [ ] Add   : Automatically sync certificates
 ```
 

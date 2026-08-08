@@ -34,7 +34,7 @@ param(
  $monitoringObjectsPath = "$PSScriptRoot\Files\db\monitorobjects.json"
  $graphSettingsPath     = "$PSScriptRoot\Settings\Config\MsGraphSettings.json"
  $statePath             = "$stateFolder\sent-state.json"
- $scriptSettingsPath = "$PSScriptRoot\Settings\Config\ScriptSettings.json"
+ $scriptSettingsPath = "$PSScriptRoot\Settings\Config\version.json"
 
 # backup paths for monitorobjects.json, sent-state.json
   $backupMonitorObjectPath = "$PSScriptRoot\Files\backup\psToDo\"
@@ -92,8 +92,6 @@ try {
     if (-not (Test-Path $monitoringObjectsPath)) { throw "Cannot find monitoring objects file: $monitoringObjectsPath"}
     try { 
          $monitoringObjects = Get-Content -Raw -Encoding UTF8 $monitoringObjectsPath | ConvertFrom-Json
-         $scriptSettings = Get-Content -Raw -Encoding UTF8 $scriptSettingsPath | ConvertFrom-Json
-         Write-Host "$scriptSettings.Version" -ForegroundColor Green
          Write-host ""
    
         }

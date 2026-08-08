@@ -35,7 +35,7 @@
 [CmdletBinding()]
 param(
     [string] $JsonPath   = "$PSScriptRoot\Files\db\monitorobjects.json",
-    [string] $ScriptSettingsPath   = "$PSScriptRoot\Settings\Config\ScriptSettings.json",
+    [string] $ScriptSettingsPath   = "$PSScriptRoot\Settings\Config\version.json",
     [string] $DateFormat = 'yyyy-MM-dd',
     [string] $fileDate = (Get-Date -Format 'yyyy-MM-dd_HH.mm.ss'),
     [string] $websitePath = "$PSScriptRoot\Files\report\index.html",
@@ -94,8 +94,6 @@ try {
       $monitoringObjects = Get-Content -Raw -Encoding UTF8 $JsonPath | ConvertFrom-Json 
       
          Write-host ""
-         $scriptSettings = Get-Content -Raw -Encoding UTF8 $ScriptSettingsPath | ConvertFrom-Json
-         Write-Host "$scriptSettings.Version" -ForegroundColor Green
     }
 catch { throw "Failed to parse JSON in '$JsonPath': $($_.Exception.Message)"}
 if (-not $monitoringObjects) { throw 'The monitoring objects file is empty or contains no objects.' }
@@ -203,6 +201,9 @@ foreach ($object in $monitoringObjects) {
         maxTrigger     = $triggers[-1]
         schedule       = @($schedule | Sort-Object trigger -Descending)
         urgency        = $urgency
+        status         = $(if ([string]::IsNullOrWhiteSpace($object.status)) { 'Backlog' } else { "$($object.status)" })
+        severity       = "$($object.severity)"
+        messageLink    = "$($object.messageLink)"
 
         mailOn         = $mailOn
         mailSender     = "$($object.mail.mailSender)"
@@ -334,6 +335,14 @@ $html = @"
   .b-critical { background: #3a2418; color: #ffa87f; }
   .b-warning { background: #382c12; color: #f5c85a; }
   .b-ok { background: var(--green-bg); color: var(--green); }
+  .b-backlog { background: #2a2f36; color: #aeb8c4; }
+  .b-active { background: #16324f; color: #6fb5ff; }
+  .b-completed { background: var(--green-bg); color: var(--green); }
+  .b-sev-normal { background: #2a2f36; color: #aeb8c4; }
+  .b-sev-high { background: #382c12; color: #f5c85a; }
+  .b-sev-critical { background: #3a1c1c; color: #ff8f8f; }
+  .link a { color: #6fb5ff; text-decoration: none; }
+  .link a:hover { text-decoration: underline; }
 
   .pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px;
           border: 1px solid var(--line-2); color: var(--dim); margin-right: 4px; white-space: nowrap; }
@@ -427,7 +436,7 @@ function renderCards() {
 }
 
 function searchBlob(r) {
-  return [r.id, r.name, r.servername, r.template, r.environment, r.action,
+  return [r.id, r.name, r.servername, r.template, r.environment, r.action, r.status, r.severity,
           r.mailSender, r.mailSubject, (r.mailRecipients || []).join(' '),
           r.teamSubject, r.teamChannelId].join(' ').toLowerCase();
 }
@@ -448,7 +457,7 @@ function visibleRows() {
 const COLS = [
   ['', ''], ['id','Id'], ['name','Name'], ['servername','Server'],
   ['environment','Environment'], ['expireDate','Expires'], ['daysLeft','Days left'],
-  ['trigger','Window'], ['urgency','Status'], ['notify','Notify']
+  ['trigger','Window'], ['urgency','Urgency'], ['status','Status'], ['notify','Notify']
 ];
 
 function scheduleHtml(r) {
@@ -490,6 +499,9 @@ function detailHtml(r) {
     '<div class="block"><h4>Action required</h4>' +
       '<div>' + esc(r.action) + '</div>' +
       '<dl class="kv" style="margin-top:10px">' +
+        '<dt>Status</dt><dd><span class="badge b-' + (r.status || '').toLowerCase() + '">' + esc(r.status) + '</span></dd>' +
+        (r.severity ? '<dt>Severity</dt><dd><span class="badge b-sev-' + r.severity.toLowerCase() + '">' + esc(r.severity) + '</span></dd>' : '') +
+        (r.messageLink ? '<dt>Link</dt><dd class="link"><a href="' + esc(r.messageLink) + '" target="_blank" rel="noopener">Open in admin center</a></dd>' : '') +
         '<dt>Template</dt><dd>' + esc(r.template) + '</dd>' +
         '<dt>Triggers</dt><dd>' + (r.allTriggers || []).join(', ') + '</dd>' +
       '</dl></div>' +
@@ -553,6 +565,7 @@ function render() {
         '<td class="days">' + daysText(r.daysLeft) + '</td>' +
         '<td class="trigger">' + windowCell(r) + '</td>' +
         '<td><span class="badge b-' + r.urgency + '">' + r.urgency + '</span></td>' +
+        '<td><span class="badge b-' + (r.status || '').toLowerCase() + '">' + esc(r.status) + '</span></td>' +
         '<td>' + notifyCell(r) + '</td>' +
       '</tr>';
     return main + (isOpen ? detailHtml(r) : '');
@@ -634,7 +647,12 @@ $outDir = Split-Path $websitePath -Parent
 if ($outDir -and -not (Test-Path $outDir)) {New-Item -Path $outDir -ItemType Directory -Force | Out-Null}
 $html | Set-Content -Path $websitePath -Encoding UTF8 -Verbose
 Write-Host "Report written to $websitePath" -ForegroundColor Green
-get-childitem -Path $websitePath -Force -File | Copy-Item -Destination $backupWebsitePath -Force -Verbose 
+
+# Ensure the backup folder exists before copying the report into it.
+$backupDir = Split-Path $backupWebsitePath -Parent
+if ($backupDir -and -not (Test-Path $backupDir)) { New-Item -Path $backupDir -ItemType Directory -Force | Out-Null }
+
+get-childitem -Path $websitePath -Force -File | Copy-Item -Destination $backupWebsitePath -Force -Verbose
 
 Write-Host "Report written to $backupWebsitePath" -ForegroundColor Green
 Write-Host "HTML file written to $websitePath" -ForegroundColor Green

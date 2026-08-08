@@ -1,0 +1,24 @@
+{
+  "template": "MessageCenter",
+  "environment": "prod.local",
+  "status": "Backlog",
+  "description": "Microsoft 365 Message Center advisory {{messageId}} ({{category}}, severity {{severity}}) for {{servername}} requires action by {{expireDate}}. Review the message in the Microsoft 365 admin center (Health > Message center) and complete the required change before the deadline.",
+  "1dateTrigger": 30,
+  "2dateTrigger": 15,
+  "3dateTrigger": 7,
+  "notifyMethodbyMail": true,
+  "notifyMethodbyTeams": false,
+  "mail": {
+    "mailSender": "REPLACE_ME_WITH_SENDER_MAIL_ADDRESS",
+    "mailSubject": "{{messageId}} action required by {{expireDate}}",
+    "mailBody": "Microsoft 365 advisory '{{name}}' ({{category}}, severity {{severity}}) affecting {{servername}} requires action by {{expireDate}}.",
+    "mailRecipients": [
+      "REPLACE_ME_WITH_MAIL_ADDRESS"
+    ]
+  },
+  "teams": {
+    "teamSubject": "{{messageId}} action required by {{expireDate}}",
+    "teamBody": "Microsoft 365 advisory '{{name}}' ({{category}}, severity {{severity}}) affecting {{servername}} requires action by {{expireDate}}.",
+    "teamWebhookUrl": "REPLACE_ME_WITH_TEAMS_WEBHOOK_URL"
+  }
+}

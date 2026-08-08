@@ -1,0 +1,24 @@
+{
+  "template": "AppRegistration",
+  "environment": "prod.local",
+  "status": "Backlog",
+  "description": "Entra ID app registration credential is approaching expiry. Rotate the secret/certificate in Entra ID and update every consumer (Key Vault, CI secret store, app config).",
+  "1dateTrigger": 30,
+  "2dateTrigger": 15,
+  "3dateTrigger": 7,
+  "notifyMethodbyMail": true,
+  "notifyMethodbyTeams": false,
+  "mail": {
+    "mailSender": "REPLACE_ME_WITH_SENDER_MAIL_ADDRESS",
+    "mailSubject": "{{name}} expires soon",
+    "mailBody": "The Entra ID credential '{{name}}' (app {{servername}}) expires on {{expireDate}}. Rotate it before then.",
+    "mailRecipients": [
+      "REPLACE_ME_WITH_MAIL_ADDRESS"
+    ]
+  },
+  "teams": {
+    "teamSubject": "{{name}} expires soon",
+    "teamBody": "The Entra ID credential '{{name}}' (app {{servername}}) expires on {{expireDate}}. Rotate it before then.",
+    "teamWebhookUrl": "REPLACE_ME_WITH_TEAMS_WEBHOOK_URL"
+  }
+}
