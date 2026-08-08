@@ -170,7 +170,9 @@ New-ApplicationAccessPolicy -AppId <appId> `
 Test-ApplicationAccessPolicy -Identity CalenderReminder@lab.local -AppId <appId>
 The policy can take up to 30 minutes to apply.
 ```
+
 The helper script `Setup-SenderMailbox-and-AccessPolicy.ps1` in the repository root creates a dedicated shared mailbox and this access policy for you in one step.
+
 ---
 ## API permissions (all features)
 Every Graph permission the tool uses is an **Application** permission (app-only certificate auth, no signed-in user) and requires **admin consent**. Add them under **App registration → API permissions → Microsoft Graph → Application permissions**, then click **Grant admin consent**.
