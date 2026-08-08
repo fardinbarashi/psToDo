@@ -19,6 +19,10 @@ function Save-SentState {
         }
     }
 
+    # Make sure the state folder exists (first run creates Files\state).
+    $dir = Split-Path $Path -Parent
+    if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+
     try {
         if ($State.Count) {
             $State | ConvertTo-Json -Depth 3 | Set-Content -Path $Path -Encoding UTF8

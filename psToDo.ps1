@@ -41,6 +41,11 @@ param(
   $backupSendStateJsonPath = "$PSScriptRoot\Files\backup\psToDo\"
   $backupMsGraphSettingsPath = "$PSScriptRoot\Files\backup\psToDo\"
 
+# Ensure the folders the script writes to exist (first-run safe)
+ foreach ($dir in @($logFolder, $stateFolder, $reportFolder, $backupMonitorObjectPath)) {
+     if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+ }
+
 # The three trigger keys, in the order they appear in the JSON
  $triggerKeys = @('1dateTrigger', '2dateTrigger', '3dateTrigger')
 
@@ -372,11 +377,19 @@ try {
     Get-Date -Format 'yyyy/MM/dd HH:mm:ss'
     Write-Host "Start $Section ... 0%" -ForegroundColor Yellow
 
-    # Create a backup of the monitorobjects.json and sent-state.json files with a timestamp in the filename
+    # Create a backup of the monitorobjects.json and sent-state.json files with a timestamp in the filename.
+    # Each copy is guarded: a file that does not exist yet (e.g. sent-state.json on a first run) is skipped, not fatal.
     $backupfileDate = Get-Date -Format 'yyyy-MM-dd_HH.mm.ss'
-    get-childitem -Path $monitoringObjectsPath | Copy-Item -Destination "$backupMonitorObjectPath\monitorobjects-$($backupfileDate).json" -Force -Verbose
-    get-childitem -Path $statePath | Copy-Item -Destination "$backupSendStateJsonPath\sendstate-$($backupfileDate).json" -Force -Verbose
-    get-childitem -Path $graphSettingsPath | Copy-Item -Destination "$backupMsGraphSettingsPath\MsGraphSettings-$($backupfileDate).json" -Force -Verbose
+    if (-not (Test-Path $backupMonitorObjectPath)) { New-Item -ItemType Directory -Path $backupMonitorObjectPath -Force | Out-Null }
+
+    if (Test-Path $monitoringObjectsPath) { Copy-Item -Path $monitoringObjectsPath -Destination "$backupMonitorObjectPath\monitorobjects-$($backupfileDate).json" -Force -Verbose }
+    else { Write-Warning "Skipped backup: $monitoringObjectsPath not found." }
+
+    if (Test-Path $statePath) { Copy-Item -Path $statePath -Destination "$backupSendStateJsonPath\sendstate-$($backupfileDate).json" -Force -Verbose }
+    else { Write-Host "No state file to back up yet ($statePath)." -ForegroundColor DarkGray }
+
+    if (Test-Path $graphSettingsPath) { Copy-Item -Path $graphSettingsPath -Destination "$backupMsGraphSettingsPath\MsGraphSettings-$($backupfileDate).json" -Force -Verbose }
+    else { Write-Warning "Skipped backup: $graphSettingsPath not found." }
 
     Write-Host "Start $Section ... 100%" -ForegroundColor Green
     Write-Host ''
