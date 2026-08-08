@@ -32,21 +32,12 @@ The scripts create the folders they need on first run.
 - [Roadmap](#roadmap)
 
 ## What's new
-<<<<<<< Updated upstream
-[x] Added : Import-EntraAppRegistrations — sync app registration secret & certificate expiry from Entra ID ->
-**Entra ID app registration importer (plugin)** — a new script, `Settings\plugin\Import-EntraAppRegistrations.ps1`, reads client secrets and certificates from every app registration in the tenant via Microsoft Graph and merges their expiry dates into `Files\db\monitorobjects.json`. 
-App-registration credentials are now tracked automatically instead of being added by hand. 
-It backs up the json database first, never overwrites existing objects, 
-See [Entra ID app registration importer (plugin)](#entra-id-app-registration-importer-plugin).
-=======
 
 **Version 1.2** — the HTML report has a new **Status** column (Backlog / Active / Completed) with coloured badges, and Message Center rows now carry a **severity** badge and a clickable **admin-center link**. Both importers bumped to v1.1.
-
 **Version 1.1** — added the `Settings\plugin` importers for Entra app registrations and Microsoft 365 Message Center. Each plugin ships as a versioned script with its own `config\version.json` (version + a short `Changes` note).
-
 **Entra ID app registration importer (plugin)** — a new script, `Settings\plugin\Import-EntraAppRegistrations-v1.1.ps1`, reads client secrets and certificates from every app registration in the tenant via Microsoft Graph and merges their expiry dates into `Files\db\monitorobjects.json`. App-registration credentials are now tracked automatically instead of being added by hand. It backs up the database first, never overwrites existing objects, and re-runs are idempotent. See [Entra ID app registration importer (plugin)](#entra-id-app-registration-importer-plugin).
 
-**Microsoft 365 Message Center importer (plugin)** — a new script, `Settings\plugin\Import-M365MessageCenter-v1.1.ps1`, reads Message Center advisories via Microsoft Graph and merges the ones that carry a deadline (`actionRequiredByDateTime`) into `Files\db\monitorobjects.json`, so upcoming Microsoft 365 changes with a hard deadline are tracked alongside everything else. Same backup-first, merge-not-overwrite, idempotent behaviour. See [Microsoft 365 Message Center importer (plugin)](#microsoft-365-message-center-importer-plugin).
+**Mcrosoft 365 Message Center importer (plugin)** — a new script, `Settings\plugin\Import-M365MessageCenter-v1.1.ps1`, reads Message Center advisories via Microsoft Graph and merges the ones that carry a deadline (`actionRequiredByDateTime`) into `Files\db\monitorobjects.json`, so upcoming Microsoft 365 changes with a hard deadline are tracked alongside everything else. Same backup-first, merge-not-overwrite, idempotent behaviour. See [Microsoft 365 Message Center importer (plugin)](#microsoft-365-message-center-importer-plugin).
 >>>>>>> Stashed changes
 
 ```
