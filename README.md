@@ -1,13 +1,14 @@
 # psToDo — Calender Reminder
 ![logo](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/pstodologo.png) 
-A PowerShell solution that watches expiry dates in a JSON file and alerts a team by **mail** and **Microsoft Teams** before things lapse 
+A PowerShell solution that watches expiry dates in a JSON file and alerts a team by **mail** and **Microsoft Teams** before things lapse
+```
 - upgrade-notifcations to teams
 - certificates
 - secrets
 - tokens
 - host keys
 - license deadline
-  
+ ``` 
 anything with a deadline. It also renders a self-contained **HTML status dashboard** for IIS.
 Built and tested on **PowerShell 7.3.1 (Core)**.
 The scripts create the folders they need on first run.
@@ -25,31 +26,35 @@ The scripts create the folders they need on first run.
 - [Microsoft 365 Message Center importer (plugin)](#microsoft-365-message-center-importer-plugin)
 - [Repository layout](#repository-layout)
 - [Roadmap](#roadmap)
+
+---
 ## What's new
-** Kanban mode deloyed
+
+### 1.3 :
+**Kanban mode deloyed**
 ![Kanban-mode](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/appregmessagecenter.jpg) 
 
-**Latest — report tabs & completed archive.**
-
+**Report tabs & completed archive.**
 - The HTML report now has **five tabs**: **Monitored**, **Completed**, **No channel**, **No credentials** and **Not monitored**.
 - **Completed archive** — objects with status **Completed** are copied to their own file, `Files\config\MonitorObjectComplete.json`, each time the report runs. It is a **copy, not a move**: the objects stay in `monitorobjects.json`. The **Completed** tab is built **only** from that file, and shows a note at the top naming the source file.
 - **Copy date** — each object written to `MonitorObjectComplete.json` gets a `copiedDate` (the day it was first copied over). The date is **preserved across runs** and is shown next to the **Completed** badge in the row detail, e.g. `Status  Completed  2026-08-10`.
 - **No channel** tab — lists any object that has **neither mail nor Teams** enabled (`notifyMethodbyMail` and `notifyMethodbyTeams` both off), so it would never alert. This replaces the old warning banner with a dedicated tab that names the affected objects.
 
-**Version 1.3** — reporting and coverage upgrades.
-
-- The HTML report is now split into tabs: **Monitored**, **No credentials**, and **Not monitored** (the old "not monitored" banner became its own tab).
-- App registrations with **no secret and no certificate** are imported too and listed in the **No credentials** tab (clickable rows). Each row explains how to check whether the app is still in use: copy its **App ID** → Entra → **Enterprise applications** → search the App ID → open the service principal → **Sign-in logs**.
+**Report** — more data to report.
+- The HTML report is now split into tabs: **Monitored**, **No credentials**, and **Not monitored**
+- App registrations with **no secret and no certificate** are imported too and listed in the **No credentials** tab
 - Entra rows set **environment** to `Entra - <tenant name> - <tenant id>`, and the row detail shows the **App ID** (Entra) or **Message ID** (Message Center).
 - Added two **delegated importers** that sign in as a **user** (interactive) instead of an app registration + certificate — no certificate or `MsGraphSettings.json` needed.
-- Reliability fixes: the scripts create the folders they need on first run, backups skip files that do not exist yet, and the version info no longer clutters the run log. Reading the tenant name for the environment tag uses `Organization.Read.All` (falls back to the tenant id if it is not granted).
-- Versioning: the main script, both plugins and all three `version.json` files are aligned to **1.3**, and each `version.json` now keeps a `History` list of past releases.
+- Reading the tenant name for the environment tag uses `Organization.Read.All` (falls back to the tenant id if it is not granted).
 
-**Version 1.2** — the HTML report has a new **Status** column (Backlog / Active / Completed) with coloured badges, and Message Center rows now carry a **severity** badge and a clickable **admin-center link**. Both importers bumped to v1.1.
-**Version 1.1** — added the `Settings\plugin` importers for Entra app registrations and Microsoft 365 Message Center. Each plugin ships as a versioned script with its own `config\version.json` (version + a short `Changes` note).
-**Entra ID app registration importer (plugin)** — a new script, `Settings\plugin\Import-EntraAppRegistrations-v1.1.ps1`, reads client secrets and certificates from every app registration in the tenant via Microsoft Graph and merges their expiry dates into `Files\db\monitorobjects.json`. App-registration credentials are now tracked automatically instead of being added by hand. It backs up the database first, never overwrites existing objects, and re-runs are idempotent. See [Entra ID app registration importer (plugin)](#entra-id-app-registration-importer-plugin).
-**Microsoft 365 Message Center importer (plugin)** — a new script, `Settings\plugin\Import-M365MessageCenter-v1.1.ps1`, reads Message Center advisories via Microsoft Graph and merges the ones that carry a deadline (`actionRequiredByDateTime`) into `Files\db\monitorobjects.json`, so upcoming Microsoft 365 changes with a hard deadline are tracked alongside everything else. Same backup-first, merge-not-overwrite, idempotent behaviour. See [Microsoft 365 Message Center importer (plugin)](#microsoft-365-message-center-importer-plugin).
-** System-Design
+### 1.2 :
+the HTML report has a new **Status** column (Backlog / Active / Completed) with coloured badges, and Message Center rows now carry a **severity** badge and a clickable **admin-center link**. 
+
+### 1.1 :
+added the `Settings\plugin` importers for Entra app registrations and Microsoft 365 Message Center. Each plugin ships as a versioned script with its own `config\version.json` (version + a short `Changes` note).
+
+---
+## System-Design
 ![System-Design](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/appregmessagecenter2.jpg) 
 ```
 Always WhatIf-run first. 
@@ -219,6 +224,9 @@ Forexample Mail alerts:
 ![3dateTrigger Mail3](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/Mail3.jpg) 
 below 0 :
 ![below 0 Mail4](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/Mail4.jpg)
+
+---
+
 ## How to add new object to monitor in The db\monitorobjects.json
 `Files\db\monitorobjects.json` is an array of objects that you need do manually add data to.
 #### HowTo : 
@@ -271,6 +279,8 @@ You must now configure the Teams details so the system can post the alert to you
 ```
 Step 4 (Optional): Set a workflow status
 `status` is an optional field. Set it to `Backlog`, `Active` or `Completed` and it shows up as a coloured badge in the dashboard. If you leave it out, the dashboard treats the object as `Backlog`. It does not affect alerting.
+
+---
 ### Object field reference
 Every entry in `monitorobjects.json` describes one thing to watch. Fields below in the order they appear.
 Nothing is shared between objects.
@@ -316,6 +326,7 @@ The plugins add a few extra fields to the rows they create. They are ignored by 
 | `severity` | Message Center importer | The advisory severity (`normal` / `high` / `critical`), shown as a coloured badge in the dashboard. |
 | `messageLink` | Message Center importer | Deep link to the message in the Microsoft 365 admin center, shown as a clickable "Open in admin center" link in the dashboard. |
 
+---
 ### Why a state file
 `Files\state\sent-state.json` records which windows have already alerted, keyed by `id_expireDate_trigger`. This gives two things a plain date-match cannot:
 - **Each window fires exactly once**, even when the script runs every day.
@@ -325,6 +336,7 @@ Two extra cases are handled: the **expiry day** itself, and a **recurring remind
 ### The completed archive file
 Every time the HTML report runs, it copies each object whose `status` is **Completed** into `Files\config\MonitorObjectComplete.json`. This is a **copy, not a move** — the objects also stay in `monitorobjects.json`. The report's **Completed** tab is built **only** from this file.
 Each copied object gets an extra `copiedDate` field set to the day it was first copied over. That date is **preserved on later runs** (matched on `entraKeyId`, then `messageId`, then `appId`, otherwise `name`+`servername`+`expireDate`), so it reflects when the object was completed, not when the report last ran. The date is shown next to the **Completed** badge in the row detail. The file always mirrors the objects currently marked Completed: set an object back to `Active` and it drops out of the archive on the next run. Change the location with the report's `-CompleteJsonPath` parameter.
+
 ---
 ## Entra ID app registration importer (plugin)
 | Script | Job |
@@ -358,12 +370,14 @@ Always WhatIf-run first.
 .\Settings\plugin\Import-EntraAppRegistrations-v1.1.ps1 -WhatIf
 .\Settings\plugin\Import-EntraAppRegistrations-v1.1.ps1
 ```
+
 | Switch | Effect |
 |--------|--------|
 | `-UseMockData` | Skip Graph and use built-in sample credentials — test backup/merge with no tenant. |
 | `-NoDateRefresh` | Do not update `expireDate` on already-imported objects. |
 | `-WhatIf` | Show what would change without writing (nothing is backed up or saved). |
 ---
+
 ## Microsoft 365 Message Center importer (plugin)
 | Script | Job |
 |--------|-----|
@@ -447,6 +461,7 @@ Files\
   backup\                          Timestamped backups
 Logs\                              Per-run transcripts
 ```
+
 ---
 ## Roadmap
 ```
