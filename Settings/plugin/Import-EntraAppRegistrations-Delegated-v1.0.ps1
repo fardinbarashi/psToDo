@@ -3,12 +3,15 @@ System requirements
     PSVersion  7.3.1 (Core) or later
     PSEdition  Core
 
-psToDo plugin : Import-EntraAppRegistrations
+psToDo plugin : Import-EntraAppRegistrations (Delegated / user sign-in)
     Author  : Fardin Barashi
-    Title   : psToDo - Entra ID app registration importer
-    Purpose : Read app registration credentials (client secrets + certificates)
-              from Entra ID via Microsoft Graph and merge their expiry dates
-              into Files\db\monitorobjects.json.
+    Title   : psToDo - Entra ID app registration importer (delegated auth)
+    Purpose : Same as the app-registration importer, but authenticates as a
+              USER (interactive sign-in) instead of an app registration +
+              certificate. Reads app registration credentials and merges their
+              expiry dates into Files\db\monitorobjects.json.
+
+    Apps with no secret and no certificate are still listed (inventory rows).
 
 Behaviour
     1. Reads every app registration in the tenant and expands each
@@ -30,32 +33,47 @@ Behaviour
        so re-runs are idempotent. The existing psToDo scripts ignore unknown
        fields, so this is safe.
 
-Graph permissions
-    Application permission : Application.Read.All  (grant admin consent)
-    Certificate auth is reused from the rest of psToDo (MsGraphSettings.json +
-    Connect-CalenderReminderGraph). Note: this is a different scope than the
-    Mail.Send used by the main script, so add Application.Read.All to the same
-    app registration (or a dedicated one) before running.
+Authentication (delegated - no app registration or certificate needed)
+    Signs in as a user with Connect-MgGraph, using the built-in Microsoft Graph
+    PowerShell client. The signed-in user needs the delegated scope
+    Application.Read.All (a role such as Global Reader or Application
+    Administrator, plus consent to the scope). No MsGraphSettings.json, no
+    certificate.
+      - default        : interactive browser sign-in
+      - -UseDeviceCode : sign in with a device code (headless host)
+      - -Credential    : username/password (ROPC) - also needs -ClientId (a
+                         public-client app) and -TenantId. ROPC does not work
+                         with MFA or guest/personal accounts; prefer interactive.
 
-Switches
+Switches / parameters
     -UseMockData   Skip Graph completely and use built-in sample credentials.
-                   Lets you test the backup/merge logic in a lab with no tenant.
     -NoDateRefresh Do not update expireDate on already-imported objects.
-    -WhatIf        Show what would change without writing (SupportsShouldProcess).
+    -TenantId      Pin the sign-in to a specific tenant.
+    -UseDeviceCode Device-code sign-in.
+    -Credential    PSCredential for username/password (ROPC).
+    -ClientId      Public-client app id (only with -Credential).
+    -WhatIf        Show what would change without writing.
 
 Examples
     # Lab test, no tenant needed:
-    .\Import-EntraAppRegistrations-v1.1.ps1 -UseMockData -WhatIf
-    .\Import-EntraAppRegistrations-v1.1.ps1 -UseMockData
+    .\Import-EntraAppRegistrations-Delegated-v1.0.ps1 -UseMockData -WhatIf
 
-    # Live against the tenant:
-    .\Import-EntraAppRegistrations-v1.1.ps1
+    # Live - interactive user sign-in:
+    .\Import-EntraAppRegistrations-Delegated-v1.0.ps1 -WhatIf
+    .\Import-EntraAppRegistrations-Delegated-v1.0.ps1
+
+    # Headless host (device code):
+    .\Import-EntraAppRegistrations-Delegated-v1.0.ps1 -UseDeviceCode
 #>
 
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [switch] $UseMockData,
-    [switch] $NoDateRefresh
+    [switch] $NoDateRefresh,
+    [string] $TenantId,          # optional; pin the sign-in to a specific tenant
+    [switch] $UseDeviceCode,     # sign in with a device code (headless / no browser on this host)
+    [pscredential] $Credential,  # optional username/password (ROPC) - needs -ClientId + -TenantId
+    [string] $ClientId           # public-client app id, only used with -Credential (ROPC)
 )
 
 $ErrorActionPreference = 'Stop'
@@ -95,16 +113,21 @@ function New-MonitorObjectFromCredential {
     param(
         [Parameter(Mandatory)] $Defaults,
         [Parameter(Mandatory)] $Credential,   # PSCustomObject: Name, ExpireDate, ServerName, KeyId
-        [Parameter(Mandatory)] [int] $Id
+        [Parameter(Mandatory)] [int] $Id,
+        [string] $Environment                 # "Entra - <tenant name> - <tenant id>"; falls back to the default
     )
 
-    $expire = ([datetime]$Credential.ExpireDate).ToString($expireDateFormat)
+    # An app with no secrets and no certificates has nothing that expires.
+    # It is still listed (as an inventory row) but never alerts.
+    $isEmpty = [bool]$Credential.NoCredentials
+    $expire  = if ($isEmpty) { '' } else { ([datetime]$Credential.ExpireDate).ToString($expireDateFormat) }
+    $env     = if ([string]::IsNullOrWhiteSpace($Environment)) { $Defaults.environment } else { $Environment }
 
     $tokens = @{
         name       = $Credential.Name
         expireDate = $expire
         servername = $Credential.ServerName
-        environment = $Defaults.environment
+        environment = $env
     }
 
     $mail = [ordered]@{
@@ -126,18 +149,20 @@ function New-MonitorObjectFromCredential {
         expireDate          = $expire
         template            = $Defaults.template
         servername          = $Credential.ServerName
-        environment         = $Defaults.environment
+        appId               = $Credential.ServerName
+        environment         = $env
         status              = $Defaults.status
-        description         = $Defaults.description
+        description         = if ($isEmpty) { 'This app registration has no secrets or certificates to monitor.' } else { $Defaults.description }
         '1dateTrigger'      = $Defaults.'1dateTrigger'
         '2dateTrigger'      = $Defaults.'2dateTrigger'
         '3dateTrigger'      = $Defaults.'3dateTrigger'
-        notifyMethodbyMail  = $Defaults.notifyMethodbyMail
-        notifyMethodbyTeams = $Defaults.notifyMethodbyTeams
+        notifyMethodbyMail  = if ($isEmpty) { $false } else { $Defaults.notifyMethodbyMail }
+        notifyMethodbyTeams = if ($isEmpty) { $false } else { $Defaults.notifyMethodbyTeams }
         mail                = $mail
         teams               = $teams
         source              = 'EntraAppReg'
-        entraKeyId          = $Credential.KeyId
+        entraKeyId          = [string]$Credential.KeyId
+        noCredentials       = $isEmpty
     }
 }
 
@@ -150,6 +175,7 @@ function Get-CredentialListFromApps {
     foreach ($app in $Apps) {
         $appName = $app.DisplayName
         $appId   = $app.AppId
+        $added   = 0
 
         foreach ($secret in @($app.PasswordCredentials)) {
             if ($null -eq $secret.EndDateTime) { continue }
@@ -159,7 +185,9 @@ function Get-CredentialListFromApps {
                 ExpireDate = $secret.EndDateTime
                 ServerName = $appId
                 KeyId      = [string]$secret.KeyId
+                NoCredentials = $false
             })
+            $added++
         }
 
         foreach ($cert in @($app.KeyCredentials)) {
@@ -170,6 +198,19 @@ function Get-CredentialListFromApps {
                 ExpireDate = $cert.EndDateTime
                 ServerName = $appId
                 KeyId      = [string]$cert.KeyId
+                NoCredentials = $false
+            })
+            $added++
+        }
+
+        # No secret and no certificate: still list the app (inventory row), keyed by appId.
+        if ($added -eq 0) {
+            $list.Add([pscustomobject]@{
+                Name       = "$appName - (no credentials)"
+                ExpireDate = $null
+                ServerName = $appId
+                KeyId      = "app_$appId"
+                NoCredentials = $true
             })
         }
     }
@@ -197,6 +238,12 @@ function Get-MockApps {
         )
         KeyCredentials = @()
     }
+    [pscustomobject]@{
+        DisplayName = 'psToDo-Empty-App'
+        AppId       = '33333333-3333-3333-3333-333333333333'
+        PasswordCredentials = @()
+        KeyCredentials = @()
+    }
 }
 
 #------------------------------- Load defaults & existing data -------------------------------
@@ -222,33 +269,78 @@ Write-Host "- Existing objects in file : $($existing.Count)" -ForegroundColor Da
 
 #------------------------------- Fetch credentials -------------------------------
 
+# Sign in to Microsoft Graph as a USER (delegated), not as an app registration.
+# Default: interactive browser sign-in. -UseDeviceCode for headless. -Credential for username/password (ROPC).
+function Connect-DelegatedGraph {
+    param(
+        [string[]] $Scopes,
+        [string] $TenantId,
+        [switch] $UseDeviceCode,
+        [pscredential] $Credential,
+        [string] $ClientId
+    )
+
+    if ($Credential) {
+        # Username/password (ROPC). Requires a public-client app registration (ClientId) and a tenant
+        # that allows ROPC. Does NOT work with MFA or guest/personal accounts - use interactive if it fails.
+        if (-not $ClientId -or -not $TenantId) {
+            throw "Username/password sign-in needs -ClientId (a public client app) and -TenantId."
+        }
+        $body = @{
+            client_id  = $ClientId
+            scope      = 'https://graph.microsoft.com/.default'
+            username   = $Credential.UserName
+            password   = $Credential.GetNetworkCredential().Password
+            grant_type = 'password'
+        }
+        $tok = Invoke-RestMethod -Method Post -ErrorAction Stop `
+            -Uri "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token" -Body $body
+        Connect-MgGraph -AccessToken ($tok.access_token | ConvertTo-SecureString -AsPlainText -Force) -NoWelcome
+    }
+    else {
+        $p = @{ Scopes = $Scopes; NoWelcome = $true }
+        if ($TenantId)      { $p.TenantId = $TenantId }
+        if ($UseDeviceCode) { $p.UseDeviceCode = $true }
+        Connect-MgGraph @p
+    }
+
+    $ctx = Get-MgContext
+    if (-not $ctx) { throw 'Connect-MgGraph returned no context. Sign-in failed.' }
+    Write-Host "Connected to Graph as $($ctx.Account) (delegated user sign-in)." -ForegroundColor Green
+    return $ctx
+}
+
 if ($UseMockData) {
     Write-Host '- Using MOCK data (no Graph call).' -ForegroundColor Yellow
     $apps = Get-MockApps
+    $tenantId = '11111111-1111-1111-1111-111111111111'
+    $tenantName = 'Contoso (mock)'
 } else {
-    $functionFiles = Get-ChildItem -Path $functionFolder -Filter '*.ps1' -File
-    foreach ($file in $functionFiles) { . $file.FullName }
-
-    Initialize-RequiredModules -Modules @('Microsoft.Graph.Authentication', 'Microsoft.Graph.Applications')
-
-    if (-not (Test-Path $graphSettingsPath)) { throw "Cannot find Graph settings file: $graphSettingsPath" }
-    $settings = Get-Content -Raw -Encoding UTF8 $graphSettingsPath | ConvertFrom-Json
-    foreach ($k in 'TenantId', 'AppId', 'CertificateThumbprint') {
-        if ([string]::IsNullOrWhiteSpace($settings.$k)) { throw "MsGraphSettings.json is missing $k" }
+    if (Test-Path $functionFolder) {
+        foreach ($file in (Get-ChildItem -Path $functionFolder -Filter '*.ps1' -File)) { . $file.FullName }
     }
 
-    $certificate = Get-ChildItem "Cert:\LocalMachine\My\$($settings.CertificateThumbprint)" -ErrorAction SilentlyContinue
-    if (-not $certificate) { throw "Certificate $($settings.CertificateThumbprint) not found in Cert:\LocalMachine\My" }
+    Initialize-RequiredModules -Modules @('Microsoft.Graph.Authentication', 'Microsoft.Graph.Applications', 'Microsoft.Graph.Identity.DirectoryManagement')
 
-    Connect-CalenderReminderGraph -TenantId $settings.TenantId -AppId $settings.AppId -Certificate $certificate | Out-Null
+    # User sign-in (delegated) instead of app registration + certificate.
+    Connect-DelegatedGraph -Scopes @('Application.Read.All', 'Organization.Read.All') -TenantId $TenantId -UseDeviceCode:$UseDeviceCode -Credential $Credential -ClientId $ClientId
 
     if ('Application.Read.All' -notin (Get-MgContext).Scopes) {
-        Write-Warning "Token has no Application.Read.All scope. Reading applications may fail. Current scopes: $((Get-MgContext).Scopes -join ', ')"
+        Write-Warning "Signed-in session has no Application.Read.All scope. Reading applications may fail. Current scopes: $((Get-MgContext).Scopes -join ', ')"
     }
 
     Write-Host '- Reading app registrations from Entra ID...' -ForegroundColor DarkGray
     $apps = Get-MgApplication -All -Property 'id,appId,displayName,passwordCredentials,keyCredentials'
+
+    # Tenant name + id for the environment field ("Entra - <name> - <id>").
+    $org = Get-MgOrganization -ErrorAction SilentlyContinue | Select-Object -First 1
+    $tenantId   = if ($org -and $org.Id)          { $org.Id }          else { (Get-MgContext).TenantId }
+    $tenantName = if ($org -and $org.DisplayName) { $org.DisplayName } else { $tenantId }
+    if (-not $org) { Write-Warning "Could not read the organization name (needs Organization.Read.All or Directory.Read.All). Using tenant id only." }
 }
+
+$entraEnv = "Entra - $tenantName - $tenantId"
+Write-Host "- Environment tag : $entraEnv" -ForegroundColor DarkGray
 
 $credentials = Get-CredentialListFromApps -Apps $apps
 Write-Host "- Credentials with an expiry date found : $($credentials.Count)" -ForegroundColor DarkGray
@@ -284,7 +376,7 @@ foreach ($cred in $credentials) {
         }
     } else {
         $maxId++
-        $result.Add((New-MonitorObjectFromCredential -Defaults $defaults -Credential $cred -Id $maxId))
+        $result.Add((New-MonitorObjectFromCredential -Defaults $defaults -Credential $cred -Id $maxId -Environment $entraEnv))
         $added++
     }
 }

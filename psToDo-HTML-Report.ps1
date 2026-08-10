@@ -123,12 +123,29 @@ Try
 $today       = (Get-Date).Date
 $rows        = [System.Collections.Generic.List[object]]::new()
 $invalid     = [System.Collections.Generic.List[object]]::new()
+$noCreds     = [System.Collections.Generic.List[object]]::new()
 $placeholder = 0
 
 
 foreach ($object in $monitoringObjects) {
 
     $label = "Object $($object.id) - $($object.name)"
+
+    # App registration with no secret or certificate -> its own "No credentials" tab, never alerts.
+    if ($object.noCredentials -eq $true -or ($object.source -eq 'EntraAppReg' -and [string]::IsNullOrWhiteSpace($object.expireDate))) {
+        $noCreds.Add([pscustomobject]@{
+            id          = "$($object.id)"
+            name        = "$($object.name)"
+            servername  = "$($object.servername)"
+            environment = "$($object.environment)"
+            status      = $(if ([string]::IsNullOrWhiteSpace($object.status)) { 'Backlog' } else { "$($object.status)" })
+            template    = "$($object.template)"
+            description = "$($object.description)"
+            source      = "$($object.source)"
+            entraKeyId  = "$($object.entraKeyId)"
+        })
+        continue
+    }
 
     if ([string]::IsNullOrWhiteSpace($object.expireDate)) {
         Write-Warning "$label is missing expireDate - skipping."
@@ -204,6 +221,9 @@ foreach ($object in $monitoringObjects) {
         status         = $(if ([string]::IsNullOrWhiteSpace($object.status)) { 'Backlog' } else { "$($object.status)" })
         severity       = "$($object.severity)"
         messageLink    = "$($object.messageLink)"
+        source         = "$($object.source)"
+        appId          = "$($object.appId)"
+        messageId      = "$($object.messageId)"
 
         mailOn         = $mailOn
         mailSender     = "$($object.mail.mailSender)"
@@ -234,6 +254,11 @@ if ($rows.Count -eq 1) { $dataJson = "[$dataJson]" }
 $invalidJson = if ($invalid.Count) {
     $j = $invalid | ConvertTo-Json -Depth 3 -Compress
     if ($invalid.Count -eq 1) { "[$j]" } else { $j }
+} else { '[]' }
+
+$noCredsJson = if ($noCreds.Count) {
+    $j = $noCreds | ConvertTo-Json -Depth 3 -Compress
+    if ($noCreds.Count -eq 1) { "[$j]" } else { $j }
 } else { '[]' }
 
 $generated = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
@@ -335,6 +360,7 @@ $html = @"
   .b-critical { background: #3a2418; color: #ffa87f; }
   .b-warning { background: #382c12; color: #f5c85a; }
   .b-ok { background: var(--green-bg); color: var(--green); }
+  .b-none { background: #2a2f36; color: #aeb8c4; }
   .b-backlog { background: #2a2f36; color: #aeb8c4; }
   .b-active { background: #16324f; color: #6fb5ff; }
   .b-completed { background: var(--green-bg); color: var(--green); }
@@ -375,6 +401,13 @@ $html = @"
          border-radius: 8px; color: var(--muted); }
   .warn { border-color: #5a4a1a; background: #241f10; color: #f5c85a; margin-bottom: 16px; }
   .bad { border-color: #5a2020; background: #241010; color: #ff8f8f; margin-bottom: 16px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
+  .tabs .tab { padding: 9px 18px; font-size: 14px; cursor: pointer; color: var(--dim);
+        border: none; background: none; border-bottom: 2px solid transparent; border-radius: 0; }
+  .tabs .tab:hover { color: var(--fg); background: none; }
+  .tabs .tab.active { color: var(--green); border-bottom-color: var(--green); }
+  .tabs .tab .c { color: var(--dim); font-size: 12px; margin-left: 4px; }
+  .tabs .tab.active .c { color: var(--green); }
   footer { margin-top: 20px; color: var(--dim); font-size: 12px; }
   @media (max-width: 1000px) { body { padding: 1rem; } }
 </style>
@@ -384,9 +417,11 @@ $html = @"
 <h1>PsToDo - Calender Reminder </h1>
 <div class="meta">Generated $generated &middot; source: $sourceEsc &middot; $($rows.Count) monitored objects</div>
 
+<div class="tabs" id="tabs"></div>
+
 <div class="cards" id="cards"></div>
 
-<div class="controls">
+<div class="controls" id="controls">
   <input type="search" id="filter" placeholder="Filter by name, server, recipient...">
   <button class="primary" id="reload">Reload</button>
   <button id="reset">Reset filters</button>
@@ -399,10 +434,12 @@ $html = @"
 
 <script id="data" type="application/json">$dataJson</script>
 <script id="invalid" type="application/json">$invalidJson</script>
+<script id="noncred" type="application/json">$noCredsJson</script>
 
 <script>
 const DATA    = JSON.parse(document.getElementById('data').textContent);
 const INVALID = JSON.parse(document.getElementById('invalid').textContent);
+const NONCRED = JSON.parse(document.getElementById('noncred').textContent);
 
 const URGENCY = [
   { key: 'expired',  label: 'Expired',  hint: 'Past the expiry date' },
@@ -411,13 +448,14 @@ const URGENCY = [
   { key: 'ok',       label: 'Ok',       hint: 'Inside Datetrigger 3 or beyond' }
 ];
 
-const DEFAULTS = { filter: '', urgency: null, sortKey: 'daysLeft', sortDir: 1 };
+const DEFAULTS = { filter: '', urgency: null, sortKey: 'daysLeft', sortDir: 1, tab: 'monitored' };
 let state = { ...DEFAULTS };
 let openRows = new Set();
 
 const esc = s => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
 
 function daysText(n) {
+  if (n === null || n === undefined) return '—';
   if (n < 0)   return Math.abs(n) + (Math.abs(n) === 1 ? ' day ago' : ' days ago');
   if (n === 0) return 'expires today';
   if (n === 1) return '1 day left';
@@ -500,6 +538,8 @@ function detailHtml(r) {
       '<div>' + esc(r.action) + '</div>' +
       '<dl class="kv" style="margin-top:10px">' +
         '<dt>Status</dt><dd><span class="badge b-' + (r.status || '').toLowerCase() + '">' + esc(r.status) + '</span></dd>' +
+        (r.appId ? '<dt>App ID</dt><dd class="mono">' + esc(r.appId) + '</dd>' : '') +
+        (r.messageId ? '<dt>Message ID</dt><dd class="mono">' + esc(r.messageId) + '</dd>' : '') +
         (r.severity ? '<dt>Severity</dt><dd><span class="badge b-sev-' + r.severity.toLowerCase() + '">' + esc(r.severity) + '</span></dd>' : '') +
         (r.messageLink ? '<dt>Link</dt><dd class="link"><a href="' + esc(r.messageLink) + '" target="_blank" rel="noopener">Open in admin center</a></dd>' : '') +
         '<dt>Template</dt><dd>' + esc(r.template) + '</dd>' +
@@ -515,11 +555,97 @@ function notifyCell(r) {
 }
 
 function windowCell(r) {
-  if (r.trigger !== null) return r.trigger + '-day';
+  if (r.trigger !== null && r.trigger !== undefined) return r.trigger + '-day';
+  if (r.maxTrigger === null || r.maxTrigger === undefined) return '<span class="dim">—</span>';
   return '<span class="dim">&gt; ' + r.maxTrigger + '-day</span>';
 }
 
+function renderTabs() {
+  const tabs = [
+    { key: 'monitored',    label: 'Monitored',      n: DATA.length },
+    { key: 'noncred',      label: 'No credentials', n: NONCRED.length },
+    { key: 'notmonitored', label: 'Not monitored',  n: INVALID.length }
+  ];
+  document.getElementById('tabs').innerHTML = tabs.map(t =>
+    '<button class="tab' + (state.tab === t.key ? ' active' : '') + '" data-tab="' + t.key + '">' +
+      t.label + '<span class="c">' + t.n + '</span></button>'
+  ).join('');
+}
+
+function noCredsDetailHtml(o) {
+  return '<tr class="detail"><td colspan="6"><div class="panel">' +
+    '<div class="block"><h4>App registration</h4><dl class="kv">' +
+      '<dt>App ID</dt><dd class="mono">' + esc(o.servername) + '</dd>' +
+      '<dt>Environment</dt><dd>' + esc(o.environment) + '</dd>' +
+      '<dt>Status</dt><dd><span class="badge b-' + (o.status || '').toLowerCase() + '">' + esc(o.status) + '</span></dd>' +
+      '<dt>Template</dt><dd>' + esc(o.template) + '</dd>' +
+    '</dl></div>' +
+    '<div class="block"><h4>Details</h4><dl class="kv">' +
+      '<dt>Source</dt><dd>' + esc(o.source) + '</dd>' +
+      '<dt>Key</dt><dd class="mono">' + esc(o.entraKeyId) + '</dd>' +
+    '</dl><div style="margin-top:10px;font-size:13px">' + esc(o.description) + '</div></div>' +
+    '<div class="block"><h4>Verify usage (sign-in logs)</h4>' +
+      '<div style="font-size:13px">Entra &rarr; <b>Enterprise applications</b> &rarr; search <span class="mono">' + esc(o.servername) + '</span> &rarr; open the service principal &rarr; <b>Sign-in logs</b>. No recent sign-ins = likely unused.</div>' +
+    '</div>' +
+  '</div></td></tr>';
+}
+
+function noCredsHtml() {
+  if (!NONCRED.length) {
+    return '<div class="msg">No app registrations without credentials.</div>';
+  }
+  const body = NONCRED.map(o => {
+    const isOpen = openRows.has(o.id);
+    const main =
+      '<tr class="row' + (isOpen ? ' open' : '') + '" data-id="' + esc(o.id) + '">' +
+        '<td><span class="chev">&#9654;</span></td>' +
+        '<td class="id">' + esc(o.id) + '</td>' +
+        '<td class="name">' + esc(o.name) + '</td>' +
+        '<td class="mono">' + esc(o.servername) + '</td>' +
+        '<td>' + esc(o.environment) + '</td>' +
+        '<td><span class="badge b-' + (o.status || '').toLowerCase() + '">' + esc(o.status) + '</span></td>' +
+      '</tr>';
+    return main + (isOpen ? noCredsDetailHtml(o) : '');
+  }).join('');
+  return '<div class="msg" style="margin-bottom:16px">' +
+      'App registrations with <b>no secret and no certificate</b>. Nothing expires, so they never alert — listed here for inventory. Click a row for details.' +
+      '<div style="margin-top:10px">' +
+        '<b>Verify whether one is still in use (sign-in logs):</b><br>' +
+        'Copy its <b>App ID</b> &rarr; in Entra go to <b>Enterprise applications</b> &rarr; search for that App ID &rarr; open the service principal &rarr; open <b>Sign-in logs</b>. ' +
+        'If there are no recent sign-ins, the app registration is likely unused and can be cleaned up.' +
+      '</div>' +
+    '</div>' +
+    '<table><thead><tr><th style="width:28px"></th><th>Id</th><th>Name</th><th>App ID</th><th>Environment</th><th>Status</th></tr></thead><tbody>' + body + '</tbody></table>';
+}
+
+function notMonitoredHtml() {
+  if (!INVALID.length) {
+    return '<div class="msg">Every object has a valid expiry date — nothing is unmonitored.</div>';
+  }
+  const rows = INVALID.map(o =>
+    '<tr class="row"><td class="id">' + esc(o.id) + '</td>' +
+    '<td class="name">' + esc(o.name) + '</td>' +
+    '<td>' + esc(o.reason) + '</td></tr>').join('');
+  return '<div class="msg bad" style="margin-bottom:16px">These objects have no valid <b>expireDate</b>, so they are not monitored. Fix the date in <b>monitorobjects.json</b> to start monitoring them.</div>' +
+    '<table><thead><tr><th>Id</th><th>Name</th><th>Reason</th></tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
 function render() {
+  renderTabs();
+
+  const onMonitored = state.tab === 'monitored';
+  document.getElementById('cards').style.display    = onMonitored ? '' : 'none';
+  document.getElementById('controls').style.display = onMonitored ? '' : 'none';
+
+  if (state.tab === 'noncred') {
+    document.getElementById('mount').innerHTML = noCredsHtml();
+    return;
+  }
+  if (state.tab === 'notmonitored') {
+    document.getElementById('mount').innerHTML = notMonitoredHtml();
+    return;
+  }
+
   renderCards();
 
   const view = visibleRows();
@@ -528,11 +654,6 @@ function render() {
                                 : view.length + ' of ' + DATA.length + ' objects';
 
   let banners = '';
-
-  if (INVALID.length) {
-    banners += '<div class="msg bad"><b>' + INVALID.length + ' object(s) are NOT monitored.</b><br>' +
-      INVALID.map(o => esc(o.id) + ' - ' + esc(o.name) + ': ' + esc(o.reason)).join('<br>') + '</div>';
-  }
 
   const noChannel = DATA.filter(r => !r.mailOn && !r.teamsOn).length;
   if (noChannel) {
@@ -583,9 +704,16 @@ document.getElementById('filter').addEventListener('input', e => {
 document.getElementById('reload').addEventListener('click', () => location.reload());
 
 document.getElementById('reset').addEventListener('click', () => {
-  state = { ...DEFAULTS };
+  state = { ...DEFAULTS, tab: state.tab };
   openRows.clear();
   document.getElementById('filter').value = '';
+  render();
+});
+
+document.getElementById('tabs').addEventListener('click', e => {
+  const t = e.target.closest('.tab');
+  if (!t) return;
+  state.tab = t.dataset.tab;
   render();
 });
 
