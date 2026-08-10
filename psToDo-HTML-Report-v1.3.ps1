@@ -23,7 +23,7 @@
 .NOTES
     Author : Fardin Barashi
     Title : CalenderReminderHtmlReport
-    Version : 1.0
+    Version : 1.3
       Release day : 2026-06-22
       Github Link  : https://github.com/fardinbarashi
 
@@ -35,6 +35,7 @@
 [CmdletBinding()]
 param(
     [string] $JsonPath   = "$PSScriptRoot\Files\db\monitorobjects.json",
+    [string] $CompleteJsonPath = "$PSScriptRoot\Files\config\MonitorObjectComplete.json",
     [string] $ScriptSettingsPath   = "$PSScriptRoot\Settings\Config\version.json",
     [string] $DateFormat = 'yyyy-MM-dd',
     [string] $fileDate = (Get-Date -Format 'yyyy-MM-dd_HH.mm.ss'),
@@ -97,6 +98,53 @@ try {
     }
 catch { throw "Failed to parse JSON in '$JsonPath': $($_.Exception.Message)"}
 if (-not $monitoringObjects) { throw 'The monitoring objects file is empty or contains no objects.' }
+
+# Split completed objects out and COPY them to MonitorObjectComplete.json.
+# This is a copy, not a move: the completed objects stay in monitorobjects.json.
+# The Completed tab is then built ONLY from MonitorObjectComplete.json.
+$completedObjectsRaw = @($monitoringObjects | Where-Object { "$($_.status)" -ieq 'Completed' })
+$monitoredObjectsRaw = @($monitoringObjects | Where-Object { "$($_.status)" -ine 'Completed' })
+
+# Stable identity for an object across runs (so we can keep its original copy date).
+function Get-CompleteKey {
+    param($o)
+    foreach ($k in @($o.entraKeyId, $o.messageId, $o.appId)) {
+        if (-not [string]::IsNullOrWhiteSpace($k)) { return "$k" }
+    }
+    return ('{0}|{1}|{2}' -f $o.name, $o.servername, $o.expireDate)
+}
+
+# Preserve the date each object was FIRST copied over: read any existing dates
+# from the current MonitorObjectComplete.json before we rewrite it.
+$existingCopyDates = @{}
+if (Test-Path $CompleteJsonPath) {
+    try {
+        foreach ($p in @(Get-Content -Raw -Encoding UTF8 $CompleteJsonPath | ConvertFrom-Json)) {
+            if (-not [string]::IsNullOrWhiteSpace($p.copiedDate)) {
+                $existingCopyDates[(Get-CompleteKey $p)] = "$($p.copiedDate)"
+            }
+        }
+    } catch { Write-Warning "Could not read existing $CompleteJsonPath - copy dates will be reset. $($_.Exception.Message)" }
+}
+
+$copyStamp = (Get-Date -Format 'yyyy-MM-dd')
+foreach ($o in $completedObjectsRaw) {
+    $key  = Get-CompleteKey $o
+    $date = if ($existingCopyDates.ContainsKey($key)) { $existingCopyDates[$key] } else { $copyStamp }
+    $o | Add-Member -NotePropertyName copiedDate -NotePropertyValue $date -Force
+}
+
+$completeDir = Split-Path $CompleteJsonPath -Parent
+if ($completeDir -and -not (Test-Path $completeDir)) { New-Item -ItemType Directory -Force -Path $completeDir | Out-Null }
+$completedObjectsRaw | ConvertTo-Json -Depth 20 -AsArray | Set-Content -Encoding UTF8 $CompleteJsonPath
+Write-Host "- Copied $($completedObjectsRaw.Count) completed object(s) to $CompleteJsonPath" -ForegroundColor DarkGray
+
+# Re-read the completed objects from the file, so the Completed tab is sourced
+# strictly from MonitorObjectComplete.json.
+$completedObjects = if (Test-Path $CompleteJsonPath) {
+    @(Get-Content -Raw -Encoding UTF8 $CompleteJsonPath | ConvertFrom-Json)
+} else { @() }
+
 Write-Host $Section... "100%" -ForegroundColor Green
 Write-Host ""
 } # End Try
@@ -120,19 +168,123 @@ Try
  Write-Host $Section... "0%" -ForegroundColor Yellow
 
  # Run Query
-$today       = (Get-Date).Date
-$rows        = [System.Collections.Generic.List[object]]::new()
-$invalid     = [System.Collections.Generic.List[object]]::new()
-$noCreds     = [System.Collections.Generic.List[object]]::new()
-$placeholder = 0
+$today         = (Get-Date).Date
+$rows          = [System.Collections.Generic.List[object]]::new()
+$completedRows = [System.Collections.Generic.List[object]]::new()
+$invalid       = [System.Collections.Generic.List[object]]::new()
+$noCreds       = [System.Collections.Generic.List[object]]::new()
+$placeholder   = 0
+
+# Minimal "inventory" row for an object with no usable expiry date (a no-credentials
+# app, or a Completed item without a date). It shows in a table but never alerts.
+function New-InventoryRow {
+    param($Object)
+    [pscustomobject]@{
+        id             = "$($Object.id)"
+        name           = "$($Object.name)"
+        servername     = "$($Object.servername)"
+        template       = "$($Object.template)"
+        environment    = "$($Object.environment)"
+        action         = "$($Object.description)"
+        expireDate     = '—'
+        daysLeft       = $null
+        trigger        = $null
+        allTriggers    = @()
+        maxTrigger     = $null
+        schedule       = @()
+        urgency        = 'none'
+        status         = $(if ([string]::IsNullOrWhiteSpace($Object.status)) { 'Backlog' } else { "$($Object.status)" })
+        copiedDate     = "$($Object.copiedDate)"
+        severity       = "$($Object.severity)"
+        messageLink    = "$($Object.messageLink)"
+        source         = "$($Object.source)"
+        appId          = "$($Object.appId)"
+        messageId      = "$($Object.messageId)"
+        mailOn         = $false
+        mailSender     = "$($Object.mail.mailSender)"
+        mailSubject    = "$($Object.mail.mailSubject)"
+        mailBody       = "$($Object.mail.mailBody)"
+        mailRecipients = @($Object.mail.mailRecipients)
+        teamsOn        = $false
+        teamWebhookUrl = "$($Object.teams.teamWebhookUrl)"
+        teamSubject    = "$($Object.teams.teamSubject)"
+        teamBody       = "$($Object.teams.teamBody)"
+    }
+}
+
+# Build a display row for a Completed object (read from MonitorObjectComplete.json).
+# Completed objects always get a row - a full one when they have a valid expiry
+# date and triggers, otherwise a minimal inventory row.
+function New-CompletedRow {
+    param($Object)
+
+    if ([string]::IsNullOrWhiteSpace($Object.expireDate)) { return (New-InventoryRow $Object) }
+    try {
+        $expireDate = [datetime]::ParseExact($Object.expireDate, $DateFormat, [cultureinfo]::InvariantCulture).Date
+    } catch { return (New-InventoryRow $Object) }
+
+    $daysLeft    = ($expireDate - $today).Days
+    $rawTriggers = foreach ($key in $TriggerKeys) { $Object.$key }
+    [int[]] $triggers = $rawTriggers |
+                        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+                        ForEach-Object { [int]$_ } |
+                        Sort-Object -Unique
+    if (-not $triggers) { return (New-InventoryRow $Object) }
+
+    $urgency = Get-Urgency -DaysLeft $daysLeft -Triggers $triggers
+    $hit     = $triggers | Where-Object { $daysLeft -le $_ -and $daysLeft -ge 0 } | Select-Object -First 1
+    $levels  = @('critical', 'warning', 'ok')
+    $schedule = for ($i = 0; $i -lt $triggers.Count; $i++) {
+        $t = $triggers[$i]
+        [pscustomobject]@{
+            trigger = $t
+            level   = if ($i -lt $levels.Count) { $levels[$i] } else { 'ok' }
+            date    = $expireDate.AddDays(-$t).ToString('yyyy-MM-dd')
+            passed  = ($expireDate.AddDays(-$t) -le $today)
+        }
+    }
+
+    [pscustomobject]@{
+        id             = "$($Object.id)"
+        name           = "$($Object.name)"
+        servername     = "$($Object.servername)"
+        template       = "$($Object.template)"
+        environment    = "$($Object.environment)"
+        action         = "$($Object.description)"
+        expireDate     = $expireDate.ToString('yyyy-MM-dd')
+        daysLeft       = $daysLeft
+        trigger        = $hit
+        allTriggers    = @($triggers)
+        maxTrigger     = $triggers[-1]
+        schedule       = @($schedule | Sort-Object trigger -Descending)
+        urgency        = $urgency
+        status         = $(if ([string]::IsNullOrWhiteSpace($Object.status)) { 'Completed' } else { "$($Object.status)" })
+        copiedDate     = "$($Object.copiedDate)"
+        severity       = "$($Object.severity)"
+        messageLink    = "$($Object.messageLink)"
+        source         = "$($Object.source)"
+        appId          = "$($Object.appId)"
+        messageId      = "$($Object.messageId)"
+        mailOn         = (Test-NotifyFlag $Object.notifyMethodbyMail)
+        mailSender     = "$($Object.mail.mailSender)"
+        mailSubject    = "$($Object.mail.mailSubject)"
+        mailBody       = "$($Object.mail.mailBody)"
+        mailRecipients = @($Object.mail.mailRecipients)
+        teamsOn        = (Test-NotifyFlag $Object.notifyMethodbyTeams)
+        teamWebhookUrl = "$($Object.teams.teamWebhookUrl)"
+        teamSubject    = "$($Object.teams.teamSubject)"
+        teamBody       = "$($Object.teams.teamBody)"
+    }
+}
 
 
-foreach ($object in $monitoringObjects) {
+foreach ($object in $monitoredObjectsRaw) {
 
     $label = "Object $($object.id) - $($object.name)"
+    $isCompleted = ("$($object.status)" -ieq 'Completed')
 
-    # App registration with no secret or certificate -> its own "No credentials" tab, never alerts.
-    if ($object.noCredentials -eq $true -or ($object.source -eq 'EntraAppReg' -and [string]::IsNullOrWhiteSpace($object.expireDate))) {
+    # No-credentials app registrations go to their own tab - UNLESS marked Completed (then -> Completed tab).
+    if (($object.noCredentials -eq $true -or ($object.source -eq 'EntraAppReg' -and [string]::IsNullOrWhiteSpace($object.expireDate))) -and -not $isCompleted) {
         $noCreds.Add([pscustomobject]@{
             id          = "$($object.id)"
             name        = "$($object.name)"
@@ -148,6 +300,7 @@ foreach ($object in $monitoringObjects) {
     }
 
     if ([string]::IsNullOrWhiteSpace($object.expireDate)) {
+        if ($isCompleted) { $rows.Add((New-InventoryRow $object)); continue }
         Write-Warning "$label is missing expireDate - skipping."
         $invalid.Add([pscustomobject]@{ id = "$($object.id)"; name = "$($object.name)"; reason = 'missing expireDate' })
         continue
@@ -159,6 +312,7 @@ foreach ($object in $monitoringObjects) {
         ).Date
     }
     catch {
+        if ($isCompleted) { $rows.Add((New-InventoryRow $object)); continue }
         Write-Warning "$label has an invalid expireDate: '$($object.expireDate)' (expected $DateFormat) - skipping."
         $invalid.Add([pscustomobject]@{ id = "$($object.id)"; name = "$($object.name)"; reason = "bad expireDate '$($object.expireDate)'" })
         continue
@@ -239,8 +393,15 @@ foreach ($object in $monitoringObjects) {
     })
 }
 
-if (-not $rows.Count) { throw 'No valid objects to report on. Check the warnings above.'}
-Write-Host "Processed $($rows.Count) object(s)." -ForegroundColor Green
+# Completed tab: built ONLY from MonitorObjectComplete.json
+foreach ($object in $completedObjects) {
+    $completedRows.Add((New-CompletedRow $object))
+}
+
+if (-not ($rows.Count + $completedRows.Count + $noCreds.Count + $invalid.Count)) {
+    throw 'No valid objects to report on. Check the warnings above.'
+}
+Write-Host "Processed $($rows.Count) monitored + $($completedRows.Count) completed object(s)." -ForegroundColor Green
 
 $rows | Group-Object urgency | Sort-Object Name | ForEach-Object { Write-Host ("  {0,-9} {1}" -f $_.Name, $_.Count) }
 if ($invalid.Count) { Write-Warning "$($invalid.Count) object(s) were skipped and are NOT being monitored." }
@@ -250,6 +411,12 @@ if ($placeholder) { Write-Warning "$placeholder notify field(s) still hold the p
 
 $dataJson = $rows | ConvertTo-Json -Depth 6 -Compress
 if ($rows.Count -eq 1) { $dataJson = "[$dataJson]" }
+if (-not $rows.Count) { $dataJson = '[]' }
+
+$completedJson = if ($completedRows.Count) {
+    $j = $completedRows | ConvertTo-Json -Depth 6 -Compress
+    if ($completedRows.Count -eq 1) { "[$j]" } else { $j }
+} else { '[]' }
 
 $invalidJson = if ($invalid.Count) {
     $j = $invalid | ConvertTo-Json -Depth 3 -Compress
@@ -263,6 +430,12 @@ $noCredsJson = if ($noCreds.Count) {
 
 $generated = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 $sourceEsc = [System.Net.WebUtility]::HtmlEncode($JsonPath)
+# Show the completed-file path relative to the script root (e.g. Files\config\MonitorObjectComplete.json)
+$completeDisplay = $CompleteJsonPath
+if ($PSScriptRoot -and $completeDisplay.StartsWith($PSScriptRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+    $completeDisplay = $completeDisplay.Substring($PSScriptRoot.Length).TrimStart('\', '/')
+}
+$completeSourceEsc = [System.Net.WebUtility]::HtmlEncode($completeDisplay)
 
 Write-Host $Section... "100%" -ForegroundColor Green
 Write-Host ""
@@ -422,7 +595,7 @@ $html = @"
 <div class="cards" id="cards"></div>
 
 <div class="controls" id="controls">
-  <input type="search" id="filter" placeholder="Filter by name, server, recipient...">
+  <input type="search" id="filter" placeholder="Filter by name, target, recipient...">
   <button class="primary" id="reload">Reload</button>
   <button id="reset">Reset filters</button>
   <span class="count" id="count"></span>
@@ -433,13 +606,16 @@ $html = @"
 <footer>Status follows each object's own triggers: the smallest trigger is critical, the middle one is warning, anything beyond is ok. Click a row for its mail and Teams configuration.</footer>
 
 <script id="data" type="application/json">$dataJson</script>
+<script id="completed" type="application/json">$completedJson</script>
 <script id="invalid" type="application/json">$invalidJson</script>
 <script id="noncred" type="application/json">$noCredsJson</script>
 
 <script>
-const DATA    = JSON.parse(document.getElementById('data').textContent);
-const INVALID = JSON.parse(document.getElementById('invalid').textContent);
-const NONCRED = JSON.parse(document.getElementById('noncred').textContent);
+const DATA      = JSON.parse(document.getElementById('data').textContent);
+const COMPLETED = JSON.parse(document.getElementById('completed').textContent);
+const COMPLETED_SOURCE = "$completeSourceEsc";
+const INVALID   = JSON.parse(document.getElementById('invalid').textContent);
+const NONCRED   = JSON.parse(document.getElementById('noncred').textContent);
 
 const URGENCY = [
   { key: 'expired',  label: 'Expired',  hint: 'Past the expiry date' },
@@ -454,6 +630,20 @@ let openRows = new Set();
 
 const esc = s => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
 
+// Completed objects live in their own tab and are loaded from a separate file
+// (MonitorObjectComplete.json -> COMPLETED). DATA holds only non-completed objects.
+const isCompleted = r => (r.status || '').toLowerCase() === 'completed';
+function tabBase() {
+  if (state.tab === 'completed') return COMPLETED;
+  return DATA.filter(r => !isCompleted(r));
+}
+
+// Monitored objects that have neither mail nor Teams enabled — they will never
+// alert. Completed objects are excluded (they are done, not waiting to alert).
+function noChannelRows() {
+  return DATA.filter(r => !r.mailOn && !r.teamsOn && !isCompleted(r));
+}
+
 function daysText(n) {
   if (n === null || n === undefined) return '—';
   if (n < 0)   return Math.abs(n) + (Math.abs(n) === 1 ? ' day ago' : ' days ago');
@@ -463,8 +653,9 @@ function daysText(n) {
 }
 
 function renderCards() {
+  const base = tabBase();
   document.getElementById('cards').innerHTML = URGENCY.map(u => {
-    const n = DATA.filter(r => r.urgency === u.key).length;
+    const n = base.filter(r => r.urgency === u.key).length;
     const on = state.urgency === u.key ? ' active' : '';
     return '<div class="card ' + u.key + on + '" data-u="' + u.key + '">' +
            '<div class="n">' + n + '</div>' +
@@ -481,7 +672,7 @@ function searchBlob(r) {
 
 function visibleRows() {
   const q = state.filter.toLowerCase();
-  let view = DATA.slice();
+  let view = tabBase();
   if (state.urgency) view = view.filter(r => r.urgency === state.urgency);
   if (q) view = view.filter(r => searchBlob(r).includes(q));
 
@@ -493,7 +684,7 @@ function visibleRows() {
 }
 
 const COLS = [
-  ['', ''], ['id','Id'], ['name','Name'], ['servername','Server'],
+  ['', ''], ['id','Id'], ['name','Name'], ['servername','Target'],
   ['environment','Environment'], ['expireDate','Expires'], ['daysLeft','Days left'],
   ['trigger','Window'], ['urgency','Urgency'], ['status','Status'], ['notify','Notify']
 ];
@@ -537,7 +728,8 @@ function detailHtml(r) {
     '<div class="block"><h4>Action required</h4>' +
       '<div>' + esc(r.action) + '</div>' +
       '<dl class="kv" style="margin-top:10px">' +
-        '<dt>Status</dt><dd><span class="badge b-' + (r.status || '').toLowerCase() + '">' + esc(r.status) + '</span></dd>' +
+        '<dt>Status</dt><dd><span class="badge b-' + (r.status || '').toLowerCase() + '">' + esc(r.status) + '</span>' +
+          (r.copiedDate ? '<span class="dim" style="margin-left:8px">' + esc(r.copiedDate) + '</span>' : '') + '</dd>' +
         (r.appId ? '<dt>App ID</dt><dd class="mono">' + esc(r.appId) + '</dd>' : '') +
         (r.messageId ? '<dt>Message ID</dt><dd class="mono">' + esc(r.messageId) + '</dd>' : '') +
         (r.severity ? '<dt>Severity</dt><dd><span class="badge b-sev-' + r.severity.toLowerCase() + '">' + esc(r.severity) + '</span></dd>' : '') +
@@ -562,7 +754,9 @@ function windowCell(r) {
 
 function renderTabs() {
   const tabs = [
-    { key: 'monitored',    label: 'Monitored',      n: DATA.length },
+    { key: 'monitored',    label: 'Monitored',      n: DATA.filter(r => !isCompleted(r)).length },
+    { key: 'completed',    label: 'Completed',      n: COMPLETED.length },
+    { key: 'nochannel',    label: 'No channel',     n: noChannelRows().length },
     { key: 'noncred',      label: 'No credentials', n: NONCRED.length },
     { key: 'notmonitored', label: 'Not monitored',  n: INVALID.length }
   ];
@@ -630,13 +824,36 @@ function notMonitoredHtml() {
     '<table><thead><tr><th>Id</th><th>Name</th><th>Reason</th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
+function noChannelHtml() {
+  const list = noChannelRows();
+  if (!list.length) {
+    return '<div class="msg">Every monitored object has at least one notification channel enabled.</div>';
+  }
+  const rows = list.map(o =>
+    '<tr class="row"><td class="id">' + esc(o.id) + '</td>' +
+    '<td class="name">' + esc(o.name) + '</td>' +
+    '<td>' + esc(o.servername) + '</td>' +
+    '<td>' + esc(o.environment) + '</td>' +
+    '<td class="date">' + esc(o.expireDate) + '</td>' +
+    '<td><span class="badge b-' + (o.status || '').toLowerCase() + '">' + esc(o.status) + '</span></td></tr>').join('');
+  return '<div class="msg warn" style="margin-bottom:16px">' +
+      'These object(s) have <b>no notification channel enabled</b> — neither mail nor Teams — so they will never alert even when they expire. ' +
+      'Set <b>notifyMethodbyMail</b> and/or <b>notifyMethodbyTeams</b> to a real boolean (<span class="mono">true</span>) in <b>monitorobjects.json</b>.' +
+    '</div>' +
+    '<table><thead><tr><th>Id</th><th>Name</th><th>Target</th><th>Environment</th><th>Expires</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
 function render() {
   renderTabs();
 
-  const onMonitored = state.tab === 'monitored';
-  document.getElementById('cards').style.display    = onMonitored ? '' : 'none';
-  document.getElementById('controls').style.display = onMonitored ? '' : 'none';
+  const onTable = (state.tab === 'monitored' || state.tab === 'completed');
+  document.getElementById('cards').style.display    = onTable ? '' : 'none';
+  document.getElementById('controls').style.display = onTable ? '' : 'none';
 
+  if (state.tab === 'nochannel') {
+    document.getElementById('mount').innerHTML = noChannelHtml();
+    return;
+  }
   if (state.tab === 'noncred') {
     document.getElementById('mount').innerHTML = noCredsHtml();
     return;
@@ -648,21 +865,23 @@ function render() {
 
   renderCards();
 
+  // The Completed tab is loaded from a separate data file - say so at the top.
+  const completedNote = (state.tab === 'completed')
+    ? '<div class="msg" style="margin-bottom:16px">The data in this tab comes from <b>' + esc(COMPLETED_SOURCE) + '</b>. ' +
+      'Objects with status <b>Completed</b> are copied there from monitorobjects.json each time the report runs.</div>'
+    : '';
+
   const view = visibleRows();
+  const baseTotal = tabBase().length;
   document.getElementById('count').textContent =
-    view.length === DATA.length ? DATA.length + ' objects'
-                                : view.length + ' of ' + DATA.length + ' objects';
-
-  let banners = '';
-
-  const noChannel = DATA.filter(r => !r.mailOn && !r.teamsOn).length;
-  if (noChannel) {
-    banners += '<div class="msg warn">' + noChannel + ' object(s) have no notification channel enabled. ' +
-      'Set <b>notifyMethodbyMail</b> and <b>notifyMethodbyTeams</b> to real booleans in the JSON.</div>';
-  }
+    view.length === baseTotal ? baseTotal + ' objects'
+                              : view.length + ' of ' + baseTotal + ' objects';
 
   if (!view.length) {
-    document.getElementById('mount').innerHTML = banners + '<div class="msg">No objects match the current filter.</div>';
+    const empty = (state.tab === 'completed')
+      ? '<div class="msg">No completed objects yet.</div>'
+      : '<div class="msg">No objects match the current filter.</div>';
+    document.getElementById('mount').innerHTML = completedNote + empty;
     return;
   }
 
@@ -693,7 +912,7 @@ function render() {
   }).join('');
 
   document.getElementById('mount').innerHTML =
-    banners + '<table><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table>';
+    completedNote + '<table><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table>';
 }
 
 document.getElementById('filter').addEventListener('input', e => {

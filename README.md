@@ -29,9 +29,16 @@ The scripts create the folders they need on first run.
 ** Kanban mode deloyed
 ![Kanban-mode](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/appregmessagecenter.jpg) 
 
+**Latest — report tabs & completed archive.**
+
+- The HTML report now has **five tabs**: **Monitored**, **Completed**, **No channel**, **No credentials** and **Not monitored**.
+- **Completed archive** — objects with status **Completed** are copied to their own file, `Files\config\MonitorObjectComplete.json`, each time the report runs. It is a **copy, not a move**: the objects stay in `monitorobjects.json`. The **Completed** tab is built **only** from that file, and shows a note at the top naming the source file.
+- **Copy date** — each object written to `MonitorObjectComplete.json` gets a `copiedDate` (the day it was first copied over). The date is **preserved across runs** and is shown next to the **Completed** badge in the row detail, e.g. `Status  Completed  2026-08-10`.
+- **No channel** tab — lists any object that has **neither mail nor Teams** enabled (`notifyMethodbyMail` and `notifyMethodbyTeams` both off), so it would never alert. This replaces the old warning banner with a dedicated tab that names the affected objects.
+
 **Version 1.3** — reporting and coverage upgrades.
 
-- The HTML report is now split into three tabs: **Monitored**, **No credentials**, and **Not monitored** (the old "not monitored" banner became its own tab).
+- The HTML report is now split into tabs: **Monitored**, **No credentials**, and **Not monitored** (the old "not monitored" banner became its own tab).
 - App registrations with **no secret and no certificate** are imported too and listed in the **No credentials** tab (clickable rows). Each row explains how to check whether the app is still in use: copy its **App ID** → Entra → **Enterprise applications** → search the App ID → open the service principal → **Sign-in logs**.
 - Entra rows set **environment** to `Entra - <tenant name> - <tenant id>`, and the row detail shows the **App ID** (Entra) or **Message ID** (Message Center).
 - Added two **delegated importers** that sign in as a **user** (interactive) instead of an app registration + certificate — no certificate or `MsGraphSettings.json` needed.
@@ -47,21 +54,21 @@ The scripts create the folders they need on first run.
 ```
 Always WhatIf-run first. 
 ```powershell
-.\psToDo.ps1 -WhatIf  ( Nothing is sent and the state file is left untouched )
-.\psToDo-HTML-Report.ps1 -WhatIf ( No html file is created )
+.\psToDo-v1.3.ps1 -WhatIf  ( Nothing is sent and the state file is left untouched )
+.\psToDo-HTML-Report-v1.3.ps1 -WhatIf ( No html file is created )
 ```
 Then for real:
 ```powershell
-.\psToDo.ps1 
-.\psToDo-HTML-Report.ps1
+.\psToDo-v1.3.ps1 
+.\psToDo-HTML-Report-v1.3.ps1
 ```
 ---
 ## psToDo-HTML-Report
 | Script | Job |
 |--------|-----|
-| `psToDo-HTML-Report.ps1` | Reads objects in db\monitorobjects.json and writes an HTML status page |
+| `psToDo-HTML-Report-v1.3.ps1` | Reads objects in db\monitorobjects.json and writes an HTML status page |
 ![Web dashboard](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/wwebdashboard.jpg)
-The dashboard shows each object's expiry **urgency** (expired / critical / warning / ok) and a manual **Status** (Backlog / Active / Completed) as coloured badges. Rows imported from the Message Center also show a **severity** badge and an **"Open in admin center"** link. It is split into three tabs — **Monitored**, **No credentials** (app registrations with no secret or certificate), and **Not monitored** (objects with an invalid date). Clicking a row expands its details; for Entra rows this includes the **App ID**, and for Message Center rows the **Message ID**. It creates the `Files\report\` and `Files\backup\psToDo-HTML-Report\` folders it needs on first run.
+The dashboard shows each object's expiry **urgency** (expired / critical / warning / ok) and a manual **Status** (Backlog / Active / Completed) as coloured badges. Rows imported from the Message Center also show a **severity** badge and an **"Open in admin center"** link. It is split into five tabs — **Monitored**, **Completed** (status `Completed`, read from `Files\config\MonitorObjectComplete.json`), **No channel** (objects with neither mail nor Teams enabled), **No credentials** (app registrations with no secret or certificate), and **Not monitored** (objects with an invalid date). Clicking a row expands its details; for Entra rows this includes the **App ID**, for Message Center rows the **Message ID**, and for completed rows the **copy date** next to the Status badge. It creates the `Files\report\`, `Files\config\` and `Files\backup\psToDo-HTML-Report\` folders it needs on first run.
 ## System requirements (HTML Report)
 ### Runtime
 ```
@@ -90,7 +97,7 @@ The dashboard shows each object's expiry **urgency** (expired / critical / warni
 ## psToDo
 | Script | Job |
 |--------|-----|
-| `psToDo.ps1` | Reads the objects, db\monitorobjects.json, The objects being checked, decides what is due, sends the alerts based on objects configuration |
+| `psToDo-v1.3.ps1` | Reads the objects, db\monitorobjects.json, The objects being checked, decides what is due, sends the alerts based on objects configuration |
 ![PstoDo](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/pstodo.jpg)
 ## System requirements (psToDo)
 ### Runtime
@@ -99,7 +106,7 @@ The dashboard shows each object's expiry **urgency** (expired / critical / warni
 |-------------|--------|
 | PowerShell | **7.3.1 or later (Core)**. The scripts use PowerShell 7 syntax (`??`, ternary) that fails on Windows PowerShell 5.1. Run with `pwsh`, not `powershell`.
 | OS | Windows. The certificate store paths (`Cert:\LocalMachine\My`) 
-| Task Scheduler | For unattended use, schedule `psToDo.ps1` daily with Task Scheduler under
+| Task Scheduler | For unattended use, schedule `psToDo-v1.3.ps1` daily with Task Scheduler under
                    a service account that has Read on the certificate's private key.
                    Run it with `pwsh`, not Windows PowerShell 5.1 — the scripts use PowerShell 7 syntax.
 | IIS | Restrict who can se the site 
@@ -179,7 +186,7 @@ The helper script `Setup-SenderMailbox-and-AccessPolicy.ps1` in the repository r
 Every Graph permission the tool uses is an **Application** permission (app-only certificate auth, no signed-in user) and requires **admin consent**. Add them under **App registration → API permissions → Microsoft Graph → Application permissions**, then click **Grant admin consent**.
 | Permission | Type | Needed for |
 |------------|------|------------|
-| `Mail.Send` | Application | `psToDo.ps1` — send alert mail via Graph |
+| `Mail.Send` | Application | `psToDo-v1.3.ps1` — send alert mail via Graph |
 | `Application.Read.All` | Application | `Import-EntraAppRegistrations` — read app registration secrets & certificates |
 | `ServiceMessage.Read.All` | Application | `Import-M365MessageCenter` — read Message Center advisories |
 | `Organization.Read.All` | Application | `Import-EntraAppRegistrations` — read the tenant name for the `Entra - <name> - <id>` environment tag (optional; falls back to the tenant id) |
@@ -260,6 +267,7 @@ You must now configure the Teams details so the system can post the alert to you
         "teamBody": "The certificate is approaching its expiry date.",
         "teamWebhookUrl": "https://outlook.office.com/webhook/..."
     }
+ }
 ```
 Step 4 (Optional): Set a workflow status
 `status` is an optional field. Set it to `Backlog`, `Active` or `Completed` and it shows up as a coloured badge in the dashboard. If you leave it out, the dashboard treats the object as `Backlog`. It does not affect alerting.
@@ -307,12 +315,16 @@ The plugins add a few extra fields to the rows they create. They are ignored by 
 | `messageId` | Message Center importer | The advisory id (e.g. `MC100001`). Used the same way to update the row idempotently, and shown in the row detail. |
 | `severity` | Message Center importer | The advisory severity (`normal` / `high` / `critical`), shown as a coloured badge in the dashboard. |
 | `messageLink` | Message Center importer | Deep link to the message in the Microsoft 365 admin center, shown as a clickable "Open in admin center" link in the dashboard. |
+
 ### Why a state file
 `Files\state\sent-state.json` records which windows have already alerted, keyed by `id_expireDate_trigger`. This gives two things a plain date-match cannot:
 - **Each window fires exactly once**, even when the script runs every day.
 - **A missed run is caught up** on the next run. If the server was down on the exact trigger day, the window is still open, so the alert still goes out.
 Renewing a certificate changes its `expireDate`, which changes the key prefix, retires the old keys, and re-arms all three windows automatically.
 Two extra cases are handled: the **expiry day** itself, and a **recurring reminder** once an object has already expired.
+### The completed archive file
+Every time the HTML report runs, it copies each object whose `status` is **Completed** into `Files\config\MonitorObjectComplete.json`. This is a **copy, not a move** — the objects also stay in `monitorobjects.json`. The report's **Completed** tab is built **only** from this file.
+Each copied object gets an extra `copiedDate` field set to the day it was first copied over. That date is **preserved on later runs** (matched on `entraKeyId`, then `messageId`, then `appId`, otherwise `name`+`servername`+`expireDate`), so it reflects when the object was completed, not when the report last ran. The date is shown next to the **Completed** badge in the row detail. The file always mirrors the objects currently marked Completed: set an object back to `Active` and it drops out of the archive on the next run. Change the location with the report's `-CompleteJsonPath` parameter.
 ---
 ## Entra ID app registration importer (plugin)
 | Script | Job |
@@ -391,8 +403,8 @@ Always WhatIf-run first.
 ---
 ## Repository layout
 ```
-psToDo.ps1                         Evaluate and alert
-psToDo-HTML-Report.ps1             Build the HTML dashboard
+psToDo-v1.3.ps1                         Evaluate and alert
+psToDo-HTML-Report-v1.3.ps1             Build the HTML dashboard
 Setup-SenderMailbox-and-AccessPolicy.ps1   Create the alert sender mailbox + access policy (optional helper)
 Create a self-signed cert to app-reg.ps1   Create the Graph client certificate (optional helper)
 Settings\                          Functions to script
@@ -429,6 +441,7 @@ Settings\
   
 Files\
   db\monitorobjects.json           The objects being watched
+  config\MonitorObjectComplete.json  Copy of every Completed object + copy date (auto-managed by the report)
   state\sent-state.json            What has already been alerted (auto-managed)
   report\index.html                Generated dashboard
   backup\                          Timestamped backups
@@ -441,5 +454,6 @@ Plugin folder : -->
 [x] Added : Import-EntraAppRegistrations — sync app registration secret & certificate expiry from Entra ID
 [x] Added : Import-M365MessageCenter — sync Message Center advisories that carry a deadline
 [x] Added : Delegated (user sign-in) importers for both plugins
-[x] Added : Report tabs — Monitored / No credentials / Not monitored
+[x] Added : Report tabs — Monitored / Completed / No channel / No credentials / Not monitored
+[x] Added : Completed archive (Files\config\MonitorObjectComplete.json) with per-object copy date
 ```
