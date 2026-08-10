@@ -26,20 +26,24 @@ The scripts create the folders they need on first run.
 - [Repository layout](#repository-layout)
 - [Roadmap](#roadmap)
 ## What's new
-
 ** Kanban mode deloyed
 ![Kanban-mode](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/appregmessagecenter.jpg) 
 
+**Version 1.3** — reporting and coverage upgrades.
+
+- The HTML report is now split into three tabs: **Monitored**, **No credentials**, and **Not monitored** (the old "not monitored" banner became its own tab).
+- App registrations with **no secret and no certificate** are imported too and listed in the **No credentials** tab (clickable rows). Each row explains how to check whether the app is still in use: copy its **App ID** → Entra → **Enterprise applications** → search the App ID → open the service principal → **Sign-in logs**.
+- Entra rows set **environment** to `Entra - <tenant name> - <tenant id>`, and the row detail shows the **App ID** (Entra) or **Message ID** (Message Center).
+- Added two **delegated importers** that sign in as a **user** (interactive) instead of an app registration + certificate — no certificate or `MsGraphSettings.json` needed.
+- Reliability fixes: the scripts create the folders they need on first run, backups skip files that do not exist yet, and the version info no longer clutters the run log. Reading the tenant name for the environment tag uses `Organization.Read.All` (falls back to the tenant id if it is not granted).
+- Versioning: the main script, both plugins and all three `version.json` files are aligned to **1.3**, and each `version.json` now keeps a `History` list of past releases.
+
 **Version 1.2** — the HTML report has a new **Status** column (Backlog / Active / Completed) with coloured badges, and Message Center rows now carry a **severity** badge and a clickable **admin-center link**. Both importers bumped to v1.1.
 **Version 1.1** — added the `Settings\plugin` importers for Entra app registrations and Microsoft 365 Message Center. Each plugin ships as a versioned script with its own `config\version.json` (version + a short `Changes` note).
-
 **Entra ID app registration importer (plugin)** — a new script, `Settings\plugin\Import-EntraAppRegistrations-v1.1.ps1`, reads client secrets and certificates from every app registration in the tenant via Microsoft Graph and merges their expiry dates into `Files\db\monitorobjects.json`. App-registration credentials are now tracked automatically instead of being added by hand. It backs up the database first, never overwrites existing objects, and re-runs are idempotent. See [Entra ID app registration importer (plugin)](#entra-id-app-registration-importer-plugin).
-
 **Microsoft 365 Message Center importer (plugin)** — a new script, `Settings\plugin\Import-M365MessageCenter-v1.1.ps1`, reads Message Center advisories via Microsoft Graph and merges the ones that carry a deadline (`actionRequiredByDateTime`) into `Files\db\monitorobjects.json`, so upcoming Microsoft 365 changes with a hard deadline are tracked alongside everything else. Same backup-first, merge-not-overwrite, idempotent behaviour. See [Microsoft 365 Message Center importer (plugin)](#microsoft-365-message-center-importer-plugin).
-
 ** System-Design
 ![System-Design](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/appregmessagecenter2.jpg) 
-
 ```
 Always WhatIf-run first. 
 ```powershell
@@ -57,8 +61,7 @@ Then for real:
 |--------|-----|
 | `psToDo-HTML-Report.ps1` | Reads objects in db\monitorobjects.json and writes an HTML status page |
 ![Web dashboard](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/wwebdashboard.jpg)
-
-The dashboard shows each object's expiry **urgency** (expired / critical / warning / ok) and a manual **Status** (Backlog / Active / Completed) as coloured badges. Rows imported from the Message Center also show a **severity** badge and an **"Open in admin center"** link. It creates the `Files\report\` and `Files\backup\psToDo-HTML-Report\` folders it needs on first run.
+The dashboard shows each object's expiry **urgency** (expired / critical / warning / ok) and a manual **Status** (Backlog / Active / Completed) as coloured badges. Rows imported from the Message Center also show a **severity** badge and an **"Open in admin center"** link. It is split into three tabs — **Monitored**, **No credentials** (app registrations with no secret or certificate), and **Not monitored** (objects with an invalid date). Clicking a row expands its details; for Entra rows this includes the **App ID**, and for Message Center rows the **Message ID**. It creates the `Files\report\` and `Files\backup\psToDo-HTML-Report\` folders it needs on first run.
 ## System requirements (HTML Report)
 ### Runtime
 ```
@@ -115,7 +118,7 @@ The dashboard shows each object's expiry **urgency** (expired / critical / warni
             </system.web>
            </location>
          </configuration>
-| Module | Microsoft.Graph.Authentication (the importers also use Microsoft.Graph.Applications and Microsoft.Graph.Devices.ServiceAnnouncement, installed automatically on first run).
+| Module | Microsoft.Graph.Authentication (the importers also use Microsoft.Graph.Applications, Microsoft.Graph.Devices.ServiceAnnouncement and Microsoft.Graph.Identity.DirectoryManagement, installed automatically on first run).
 | Appreg | Mail needs Graph and a certificate. Teams needs only a webhook URL — no app registration, no module, no certificate..
 ```
 ### App registration (for mail)
@@ -170,9 +173,7 @@ New-ApplicationAccessPolicy -AppId <appId> `
 Test-ApplicationAccessPolicy -Identity CalenderReminder@lab.local -AppId <appId>
 The policy can take up to 30 minutes to apply.
 ```
-
 The helper script `Setup-SenderMailbox-and-AccessPolicy.ps1` in the repository root creates a dedicated shared mailbox and this access policy for you in one step.
-
 ---
 ## API permissions (all features)
 Every Graph permission the tool uses is an **Application** permission (app-only certificate auth, no signed-in user) and requires **admin consent**. Add them under **App registration → API permissions → Microsoft Graph → Application permissions**, then click **Grant admin consent**.
@@ -181,7 +182,10 @@ Every Graph permission the tool uses is an **Application** permission (app-only 
 | `Mail.Send` | Application | `psToDo.ps1` — send alert mail via Graph |
 | `Application.Read.All` | Application | `Import-EntraAppRegistrations` — read app registration secrets & certificates |
 | `ServiceMessage.Read.All` | Application | `Import-M365MessageCenter` — read Message Center advisories |
+| `Organization.Read.All` | Application | `Import-EntraAppRegistrations` — read the tenant name for the `Entra - <name> - <id>` environment tag (optional; falls back to the tenant id) |
 Teams alerts need no Graph permission — they post to a Workflows webhook. If the **Type** column shows *Delegated* instead of *Application*, Graph returns `403` at run time.
+
+The **delegated importers** (`...-Delegated-...`) do not need any of the above pre-granted on an app registration — they sign in as a user and use the built-in Microsoft Graph PowerShell client, so the signed-in user just needs the equivalent **delegated** scope (`Application.Read.All`, `ServiceMessage.Read.All`, `Organization.Read.All`) and a role that permits the read.
 ---
 ## Teams webhook (optional)
 Teams alerts use a **Workflows (Power Automate) webhook**, not Graph. App-only posting to a channel is a protected Graph API that needs Microsoft approval; the webhook needs none.
@@ -256,10 +260,8 @@ You must now configure the Teams details so the system can post the alert to you
         "teamBody": "The certificate is approaching its expiry date.",
         "teamWebhookUrl": "https://outlook.office.com/webhook/..."
     }
- }
 ```
 Step 4 (Optional): Set a workflow status
-
 `status` is an optional field. Set it to `Backlog`, `Active` or `Completed` and it shows up as a coloured badge in the dashboard. If you leave it out, the dashboard treats the object as `Backlog`. It does not affect alerting.
 ### Object field reference
 Every entry in `monitorobjects.json` describes one thing to watch. Fields below in the order they appear.
@@ -299,8 +301,10 @@ The plugins add a few extra fields to the rows they create. They are ignored by 
 | Field | Added by | What it is |
 |-------|----------|------------|
 | `source` | both importers | `EntraAppReg` or `MessageCenter` — marks where the row came from, and is used to match the row on re-import. |
+| `appId` | Entra importer | The app's Application (client) ID. Shown in the row detail; identifies which app the credential belongs to. |
 | `entraKeyId` | Entra importer | The credential's key id. On a re-run, the matching row's `expireDate` is refreshed instead of a duplicate being added. |
-| `messageId` | Message Center importer | The advisory id (e.g. `MC100001`). Used the same way to update the row idempotently. |
+| `noCredentials` | Entra importer | `true` for app registrations with no secret and no certificate; these are shown in the report's **No credentials** tab and never alert. |
+| `messageId` | Message Center importer | The advisory id (e.g. `MC100001`). Used the same way to update the row idempotently, and shown in the row detail. |
 | `severity` | Message Center importer | The advisory severity (`normal` / `high` / `critical`), shown as a coloured badge in the dashboard. |
 | `messageLink` | Message Center importer | Deep link to the message in the Microsoft 365 admin center, shown as a clickable "Open in admin center" link in the dashboard. |
 ### Why a state file
@@ -315,15 +319,23 @@ Two extra cases are handled: the **expiry day** itself, and a **recurring remind
 |--------|-----|
 | `Settings\plugin\Import-EntraAppRegistrations-v1.1.ps1` | Reads app registration credentials (client secrets **and** certificates) from Entra ID via Microsoft Graph and merges their expiry dates into `Files\db\monitorobjects.json` |
 App registration secrets and certificates expire like everything else, but adding each one to `monitorobjects.json` by hand is tedious. This plugin pulls them straight from the tenant: every `passwordCredential` (client secret) and `keyCredential` (certificate) on every app registration becomes one monitored object.
+
+**Every app registration is included — no filtering.** Apps that have no secret and no certificate are still listed (keyed by appId, shown in the report's **No credentials** tab with no expiry, and they never alert), so you can see which apps have no credentials at all. `entraKeyId` identifies exactly which secret or certificate is expiring on the apps that do have credentials.
+
 Fields Entra provides map directly:
-- `name`       ← app display name + credential display name
-- `expireDate` ← the credential `endDateTime` (`yyyy-MM-dd`)
-- `servername` ← the app's Application (client) ID
-**The plugin has its own configuration file, `Settings\plugin\entra\config\entra-app-defaults.json`, and copies its values into every row it writes to `monitorobjects.json`.** So you set the triggers, mail addresses, status and notification switches once in that file, and every imported credential inherits them. Everything Entra cannot supply (`template`, `environment`, `status`, `description`, the three triggers, `mail`, `teams`) comes from there. The tokens `{{name}}`, `{{expireDate}}`, `{{servername}}` and `{{environment}}` are substituted per object, so defaults live in one JSON file instead of in the code. New rows get `status: "Backlog"` by default.
+- `name`        ← app display name + credential display name
+- `expireDate`  ← the credential `endDateTime` (`yyyy-MM-dd`)
+- `servername`  ← the app's Application (client) ID
+- `appId`       ← the app's Application (client) ID (shown in the row detail)
+- `environment` ← `Entra - <tenant name> - <tenant id>`
+
+**The plugin has its own configuration file, `Settings\plugin\entra\config\entra-app-defaults.json`, and copies its values into every row it writes to `monitorobjects.json`.** So you set the triggers, mail addresses, status and notification switches once in that file, and every imported credential inherits them. Everything Entra cannot supply (`template`, `status`, `description`, the three triggers, `mail`, `teams`) comes from there. The tokens `{{name}}`, `{{expireDate}}`, `{{servername}}` and `{{environment}}` are substituted per object, so defaults live in one JSON file instead of in the code. New rows get `status: "Backlog"` by default.
 The plugin has its own version file, `Settings\plugin\entra\config\version.json` (`Entraversion` + a short `Changes` note), printed at the top of each run. On a new version, bump `Entraversion` and set `Changes` to a short line describing what changed.
-**It never overwrites your data.** Before writing it takes a timestamped backup of `monitorobjects.json` into `Files\backup\psToDo\`. Existing/manual objects are left untouched; objects it imported before (matched on `entraKeyId`) get only their `expireDate` refreshed; brand-new credentials are appended with a fresh `id`. Imported objects carry two extra fields, `source` and `entraKeyId`, so re-runs are idempotent. The other scripts ignore unknown fields, so this stays compatible.
+**It never overwrites your data.** Before writing it takes a timestamped backup of `monitorobjects.json` into `Files\backup\psToDo\`. Existing/manual objects are left untouched; objects it imported before (matched on `entraKeyId`) get only their `expireDate` refreshed; brand-new credentials are appended with a fresh `id`. Imported objects carry extra fields (`source`, `appId`, `entraKeyId`), so re-runs are idempotent. The other scripts ignore unknown fields, so this stays compatible.
 ### Graph permission
-This reads app registrations, so the app needs the **application permission `Application.Read.All`** with admin consent — in addition to the `Mail.Send` the main script uses. Add it to the same app registration in Entra → API permissions → Grant admin consent. Authentication reuses the existing certificate flow (`Settings\Config\MsGraphSettings.json` + `Connect-CalenderReminderGraph`).
+This reads app registrations, so the app needs the **application permission `Application.Read.All`** with admin consent — in addition to the `Mail.Send` the main script uses. For the `Entra - <name> - <id>` environment tag it also reads the organization, which needs **`Organization.Read.All`** (or `Directory.Read.All`); without it the tag falls back to the tenant id. Authentication reuses the existing certificate flow (`Settings\Config\MsGraphSettings.json` + `Connect-CalenderReminderGraph`).
+
+A **delegated** variant, `Settings\plugin\Import-EntraAppRegistrations-Delegated-v1.0.ps1`, does the same job but signs in as a **user** (interactive) instead of an app registration + certificate — no cert or `MsGraphSettings.json` needed. Use `-UseDeviceCode` on a headless host.
 ### Run it
 Always WhatIf-run first.
 ```powershell
@@ -350,6 +362,7 @@ Fields the Message Center provides map directly:
 - `name`        ← message id + title (e.g. `MC100001 - Retirement: Legacy connector is being removed`)
 - `expireDate`  ← the advisory `actionRequiredByDateTime` (`yyyy-MM-dd`)
 - `servername`  ← the affected services
+- `messageId`   ← the advisory id (e.g. `MC100001`), shown in the row detail
 - `severity`    ← the advisory severity (`normal` / `high` / `critical`) — shown as a coloured badge in the HTML report
 - `messageLink` ← a deep link to the message in the Microsoft 365 admin center, built from the message id (Graph has no link field), rendered as a clickable "Open in admin center" link in the report
 Note: the Message Center **release status** (Scheduled / Rolling out / Launched) and the **High / Medium / Low relevance** shown in the admin center are not exposed by Microsoft Graph, so they cannot be imported. `severity` is the closest signal Graph provides.
@@ -358,6 +371,8 @@ The plugin has its own version file, `Settings\plugin\messagecenter\config\versi
 **It never overwrites your data.** Before writing it takes a timestamped backup of `monitorobjects.json` into `Files\backup\psToDo\`. Existing/manual objects are left untouched; advisories imported before (matched on `messageId`) get only their `expireDate` refreshed; brand-new advisories are appended with a fresh `id`. Imported objects carry the extra fields `source`, `messageId`, `severity` and `messageLink`, so re-runs are idempotent.
 ### Graph permission
 This reads the Message Center, so the app needs the **application permission `ServiceMessage.Read.All`** with admin consent — in addition to the `Mail.Send` the main script uses. Add it to the same app registration in Entra → API permissions → Grant admin consent. Authentication reuses the existing certificate flow (`Settings\Config\MsGraphSettings.json` + `Connect-CalenderReminderGraph`).
+
+A **delegated** variant, `Settings\plugin\Import-M365MessageCenter-Delegated-v1.0.ps1`, does the same job but signs in as a **user** (interactive) instead of an app registration + certificate.
 ### Run it
 Always WhatIf-run first.
 ```powershell
@@ -398,17 +413,19 @@ Settings\                          Functions to script
        - Test-NotifyFlag
 Settings\
   Config\
-    - MsGraphSettings.json           Tenant, app and certificate (Mail.Send + Application.Read.All + ServiceMessage.Read.All)
-    - version.json                   Tool version + change note
+    - MsGraphSettings.json           Tenant, app and certificate (Mail.Send + Application.Read.All + ServiceMessage.Read.All + Organization.Read.All)
+    - version.json                   Tool version + change note + History changelog
   plugin\
-    - Import-EntraAppRegistrations-v1.1.ps1   Import Entra app-reg secret & cert expiry into monitorobjects.json
-    - Import-M365MessageCenter-v1.1.ps1       Import Message Center advisories (with a deadline) into monitorobjects.json
+    - Import-EntraAppRegistrations-v1.1.ps1            Import Entra app-reg secret & cert expiry (app-registration auth)
+    - Import-M365MessageCenter-v1.1.ps1               Import Message Center advisories (app-registration auth)
+    - Import-EntraAppRegistrations-Delegated-v1.0.ps1 Same, but interactive user sign-in
+    - Import-M365MessageCenter-Delegated-v1.0.ps1     Same, but interactive user sign-in
     entra\config\
       - entra-app-defaults.json          Default field values for Entra-imported objects
-      - version.json                     Entra plugin version + change note
+      - version.json                     Entra plugin version + change note + History changelog
     messagecenter\config\
       - messagecenter-defaults.json      Default field values for Message Center-imported objects
-      - version.json                     Message Center plugin version + change note
+      - version.json                     Message Center plugin version + change note + History changelog
   
 Files\
   db\monitorobjects.json           The objects being watched
@@ -423,4 +440,6 @@ Logs\                              Per-run transcripts
 Plugin folder : -->
 [x] Added : Import-EntraAppRegistrations — sync app registration secret & certificate expiry from Entra ID
 [x] Added : Import-M365MessageCenter — sync Message Center advisories that carry a deadline
+[x] Added : Delegated (user sign-in) importers for both plugins
+[x] Added : Report tabs — Monitored / No credentials / Not monitored
 ```
