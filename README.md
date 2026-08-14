@@ -56,7 +56,6 @@ added the `Settings\plugin` importers for Entra app registrations and Microsoft 
 ---
 ## System-Design
 ![System-Design](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/appregmessagecenter2.jpg) 
-```
 
 ---
 ## psToDo-HTML-Report
@@ -109,10 +108,12 @@ The dashboard shows each object's expiry **urgency** (expired / critical / warni
 | Module | Microsoft.Graph.Authentication (the importers also use Microsoft.Graph.Applications, Microsoft.Graph.Devices.ServiceAnnouncement and Microsoft.Graph.Identity.DirectoryManagement, installed automatically on first run).
 | Appreg | Mail needs Graph and a certificate. Teams needs only a webhook URL — no app registration, no module, no certificate..
 ```
+
+---
 ### App registration (for mail)
 Mail is sent through Microsoft Graph using **certificate authentication** and an **application permission**. There is no signed-in user, so delegated permissions do not apply.
 **1 - Create or open the app registration**
-```
+
 Entra portal → **App registrations** → your app. Note two values from the **Overview** page:
 - **Application (client) ID** → goes into `AppId` ( Settings\Config\MsGraphSettings.json ) / Use the **Application (client) ID**, not the Object ID. They are different GUIDs on the same app
 - **Directory (tenant) ID** → goes into `TenantId` ( Settings\Config\MsGraphSettings.json )
@@ -135,21 +136,24 @@ Entra portal → **App registrations** → your app. Note two values from the **
 you can use script : Create a self-signed cert to app-reg.ps1
 More info : https://learn.microsoft.com/en-us/powershell/module/pki/new-selfsignedcertificate?view=windowsserver2025-ps
 
-File layout ->
+#### MsGraphSettings.json File layout ->
+```
  Settings\Config\MsGraphSettings.json:
 {
   "TenantId": "00000000-0000-0000-0000-000000000000",
   "AppId": "00000000-0000-0000-0000-000000000000",
   "CertificateThumbprint": "A1B2C3..."
 }
----------------------------------------------------------------------------
-Grant the Mail.Send permission
+```
+---
+#### Grant the Mail.Send permission
 API permissions → Add a permission → Microsoft Graph → Application permissions →
 search Mail.Send → add it → then Grant admin consent.
 ( If Type says *Delegated*, or Status is not granted, Graph returns `403` when sending. ) 
 ```
-**2 - For best practice — Restrict who the app can send as**
+2 - For best practice — Restrict who the app can send as
 ```
+#### Example : 
 Mail.Send` as an application permission lets the app send as **any mailbox in the tenant**. Scope it down:
 #powershell
 Connect-ExchangeOnline
@@ -162,11 +166,14 @@ New-ApplicationAccessPolicy -AppId <appId> `
     -Description 'Restrict CalenderReminder to its own mailbox'
 Test-ApplicationAccessPolicy -Identity CalenderReminder@lab.local -AppId <appId>
 The policy can take up to 30 minutes to apply.
-```
-The helper script `Setup-SenderMailbox-and-AccessPolicy.ps1` in the repository root creates a dedicated shared mailbox and this access policy for you in one step.
----
-## API permissions (all features)
+
+#### helper script Setup-SenderMailbox-and-AccessPolicy.ps1
+in the repository root creates a dedicated shared mailbox and this access policy for you in one step.
+
+#### API permissions (all features)
+
 Every Graph permission the tool uses is an **Application** permission (app-only certificate auth, no signed-in user) and requires **admin consent**. Add them under **App registration → API permissions → Microsoft Graph → Application permissions**, then click **Grant admin consent**.
+
 | Permission | Type | Needed for |
 |------------|------|------------|
 | `Mail.Send` | Application | `psToDo-v1.3.ps1` — send alert mail via Graph |
@@ -175,11 +182,14 @@ Every Graph permission the tool uses is an **Application** permission (app-only 
 | `Organization.Read.All` | Application | `Import-EntraAppRegistrations` — read the tenant name for the `Entra - <name> - <id>` environment tag (optional; falls back to the tenant id) |
 Teams alerts need no Graph permission — they post to a Workflows webhook. If the **Type** column shows *Delegated* instead of *Application*, Graph returns `403` at run time.
 
-The **delegated importers** (`...-Delegated-...`) do not need any of the above pre-granted on an app registration — they sign in as a user and use the built-in Microsoft Graph PowerShell client, so the signed-in user just needs the equivalent **delegated** scope (`Application.Read.All`, `ServiceMessage.Read.All`, `Organization.Read.All`) and a role that permits the read.
+The **delegated importers** (`...-Delegated-...`) do not need any of the above pre-granted on an app registration — 
+they sign in as a user and use the built-in Microsoft Graph PowerShell client, so the signed-in user just needs the equivalent **delegated** scope (`Application.Read.All`, `ServiceMessage.Read.All`, `Organization.Read.All`) and a role that permits the read.
+
 ---
 ## Teams webhook (optional)
 Teams alerts use a **Workflows (Power Automate) webhook**, not Graph. App-only posting to a channel is a protected Graph API that needs Microsoft approval; the webhook needs none.
 In the target channel: **Manage channel → Workflows →** *"Post to a channel when a webhook request is received"* → copy the `https://` URL into each object's `teamWebhookUrl`.
+
 ---
 ## How alerting works
 Each number is *days remaining until expiry*, and each is the moment an alert goes out. Order in the file does not matter — the script sorts them and uses the **smallest as the most urgent**, because the smallest number sits closest to the expiry date.
@@ -194,19 +204,23 @@ Example :
 ```
 The smallest trigger sits closest to expiry, so it is the most urgent. Every object can have unique triggers and a unique expiry date — nothing is shared between rows.
 Forexample Mail alerts: 
-1dateTrigger : 
+### 1dateTrigger : 
 ![1dateTrigger Mail1](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/Mail1.jpg) 
-2dateTrigger : 
+
+### 2dateTrigger : 
 ![2dateTrigger Mail2](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/Mail2.jpg)
-3dateTrigger : 
+
+### 3dateTrigger : 
 ![3dateTrigger Mail3](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/Mail3.jpg) 
-below 0 :
+
+### below 0 :
 ![below 0 Mail4](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/Mail4.jpg)
 
 ---
 
 ## How to add new object to monitor in The db\monitorobjects.json
 `Files\db\monitorobjects.json` is an array of objects that you need do manually add data to.
+
 #### HowTo : 
 Step 1: Fill in the Mandatory Core Fields
 ```
@@ -226,15 +240,18 @@ These fields set up the baseline monitoring. You must define these first to esta
 | `2dateTrigger` | Second alert point
 | `3dateTrigger` | Third alert point
 ```
+
 Step 2: Toggle Your Alert Channels (The Switches)
 These boolean toggles act as switches. Setting either to true branches the logic and forces you to configure the corresponding block in Step 3:
 ```
 | `notifyMethodbyMail` | boolean | `true` sends mail through Graph. Must be a real boolean, not `"true"` in quotes. 
 | `notifyMethodbyTeams` | boolean | `true` posts to the Teams webhook. Both can be true — the object then alerts on both channels.
 ```
+
 Step 3: Fill in the Details for the Activated Channels
 Step 3A (Only if notifyMethodbyMail is true):
 You must now provide the email routing details so the system knows how to dispatch the email:
+#### Example : 
 ```
     "mail": {
         "mailSender": "AutomateB@M365x04357061.OnMicrosoft.com",
@@ -245,6 +262,7 @@ You must now provide the email routing details so the system knows how to dispat
         ]
     },
 ```
+
 Step 3B (Only if notifyMethodbyTeams is true):
 You must now configure the Teams details so the system can post the alert to your Teams channel:
 ```
@@ -255,6 +273,7 @@ You must now configure the Teams details so the system can post the alert to you
     }
  }
 ```
+
 Step 4 (Optional): Set a workflow status
 `status` is an optional field. Set it to `Backlog`, `Active` or `Completed` and it shows up as a coloured badge in the dashboard. If you leave it out, the dashboard treats the object as `Backlog`. It does not affect alerting.
 
@@ -305,6 +324,7 @@ The plugins add a few extra fields to the rows they create. They are ignored by 
 | `messageLink` | Message Center importer | Deep link to the message in the Microsoft 365 admin center, shown as a clickable "Open in admin center" link in the dashboard. |
 
 ---
+
 ### Why a state file
 `Files\state\sent-state.json` records which windows have already alerted, keyed by `id_expireDate_trigger`. This gives two things a plain date-match cannot:
 - **Each window fires exactly once**, even when the script runs every day.
@@ -316,6 +336,7 @@ Every time the HTML report runs, it copies each object whose `status` is **Compl
 Each copied object gets an extra `copiedDate` field set to the day it was first copied over. That date is **preserved on later runs** (matched on `entraKeyId`, then `messageId`, then `appId`, otherwise `name`+`servername`+`expireDate`), so it reflects when the object was completed, not when the report last ran. The date is shown next to the **Completed** badge in the row detail. The file always mirrors the objects currently marked Completed: set an object back to `Active` and it drops out of the archive on the next run. Change the location with the report's `-CompleteJsonPath` parameter.
 
 ---
+
 ## Entra ID app registration importer (plugin)
 | Script | Job |
 |--------|-----|
@@ -377,6 +398,7 @@ The plugin has its own version file, `Settings\plugin\messagecenter\config\versi
 This reads the Message Center, so the app needs the **application permission `ServiceMessage.Read.All`** with admin consent — in addition to the `Mail.Send` the main script uses. Add it to the same app registration in Entra → API permissions → Grant admin consent. Authentication reuses the existing certificate flow (`Settings\Config\MsGraphSettings.json` + `Connect-CalenderReminderGraph`).
 
 A **delegated** variant, `Settings\plugin\Import-M365MessageCenter-Delegated-v1.3.ps1`, does the same job but signs in as a **user** (interactive) instead of an app registration + certificate.
+
 ### Run it
 Always WhatIf-run first.
 ```powershell
@@ -387,12 +409,15 @@ Always WhatIf-run first.
 .\Settings\plugin\Import-M365MessageCenter-v1.1.3.ps1 -WhatIf
 .\Settings\plugin\Import-M365MessageCenter-v1.1.3.ps1
 ```
+
 | Switch | Effect |
 |--------|--------|
 | `-UseMockData` | Skip Graph and use built-in sample advisories — test backup/merge with no tenant. |
 | `-NoDateRefresh` | Do not update `expireDate` on already-imported objects. |
 | `-WhatIf` | Show what would change without writing (nothing is backed up or saved). |
+
 ---
+
 ## Repository layout
 ```
 psToDo-v1.3.ps1                         Evaluate and alert
