@@ -57,7 +57,16 @@ added the `Settings\plugin` importers for Entra app registrations and Microsoft 
 ## System-Design
 ![System-Design](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/appregmessagecenter2.jpg) 
 ```
-
+Always WhatIf-run first. 
+```powershell
+.\psToDo-v1.3.ps1 -WhatIf  ( Nothing is sent and the state file is left untouched )
+.\psToDo-HTML-Report-v1.3.ps1 -WhatIf ( No html file is created )
+```
+Then for real:
+```powershell
+.\psToDo-v1.3.ps1 
+.\psToDo-HTML-Report-v1.3.ps1
+```
 ---
 ## psToDo-HTML-Report
 | Script | Job |
@@ -105,7 +114,22 @@ The dashboard shows each object's expiry **urgency** (expired / critical / warni
 | Task Scheduler | For unattended use, schedule `psToDo-v1.3.ps1` daily with Task Scheduler under
                    a service account that has Read on the certificate's private key.
                    Run it with `pwsh`, not Windows PowerShell 5.1 — the scripts use PowerShell 7 syntax.
-
+| IIS | Restrict who can se the site 
+        The webhook URL is the credential. Anyone who has it can post to the channel. Keep it out of the repo and out of the HTML report.
+        You'll need to add a web.config
+        You will need Windows Authentication enabled under Authentication in your site preferences for this to work,
+        The below will allow Domain Admins and deny Domain Users. Make sure you line up the config sections if you already have a section, etc.
+        
+         <configuration>
+           <location path="MyPage.aspx/php/html">
+            <system.web>
+             <authorization>
+              <allow users="DOMAIN\Domain Admins"/>
+              <deny users="DOMAIN\Domain Users"/>
+             </authorization>
+            </system.web>
+           </location>
+         </configuration>
 | Module | Microsoft.Graph.Authentication (the importers also use Microsoft.Graph.Applications, Microsoft.Graph.Devices.ServiceAnnouncement and Microsoft.Graph.Identity.DirectoryManagement, installed automatically on first run).
 | Appreg | Mail needs Graph and a certificate. Teams needs only a webhook URL — no app registration, no module, no certificate..
 ```
@@ -131,10 +155,8 @@ Entra portal → **App registrations** → your app. Note two values from the **
        -Provider          'Microsoft Software Key Storage Provider'
        $cert.Thumbprint
        Export-Certificate -Cert $cert -FilePath 'C:\temp\PsToDo.cer'
-
 you can use script : Create a self-signed cert to app-reg.ps1
 More info : https://learn.microsoft.com/en-us/powershell/module/pki/new-selfsignedcertificate?view=windowsserver2025-ps
-
 File layout ->
  Settings\Config\MsGraphSettings.json:
 {
@@ -319,7 +341,7 @@ Each copied object gets an extra `copiedDate` field set to the day it was first 
 ## Entra ID app registration importer (plugin)
 | Script | Job |
 |--------|-----|
-| `Settings\plugin\Import-EntraAppRegistrations-v1.3.ps1` | Reads app registration credentials (client secrets **and** certificates) from Entra ID via Microsoft Graph and merges their expiry dates into `Files\db\monitorobjects.json` |
+| `Settings\plugin\Import-EntraAppRegistrations-v1.1.ps1` | Reads app registration credentials (client secrets **and** certificates) from Entra ID via Microsoft Graph and merges their expiry dates into `Files\db\monitorobjects.json` |
 App registration secrets and certificates expire like everything else, but adding each one to `monitorobjects.json` by hand is tedious. This plugin pulls them straight from the tenant: every `passwordCredential` (client secret) and `keyCredential` (certificate) on every app registration becomes one monitored object.
 
 **Every app registration is included — no filtering.** Apps that have no secret and no certificate are still listed (keyed by appId, shown in the report's **No credentials** tab with no expiry, and they never alert), so you can see which apps have no credentials at all. `entraKeyId` identifies exactly which secret or certificate is expiring on the apps that do have credentials.
@@ -337,16 +359,16 @@ The plugin has its own version file, `Settings\plugin\entra\config\version.json`
 ### Graph permission
 This reads app registrations, so the app needs the **application permission `Application.Read.All`** with admin consent — in addition to the `Mail.Send` the main script uses. For the `Entra - <name> - <id>` environment tag it also reads the organization, which needs **`Organization.Read.All`** (or `Directory.Read.All`); without it the tag falls back to the tenant id. Authentication reuses the existing certificate flow (`Settings\Config\MsGraphSettings.json` + `Connect-CalenderReminderGraph`).
 
-A **delegated** variant, `Settings\plugin\Import-EntraAppRegistrations-Delegated-v1.3.ps1`, does the same job but signs in as a **user** (interactive) instead of an app registration + certificate — no cert or `MsGraphSettings.json` needed. Use `-UseDeviceCode` on a headless host.
+A **delegated** variant, `Settings\plugin\Import-EntraAppRegistrations-Delegated-v1.0.ps1`, does the same job but signs in as a **user** (interactive) instead of an app registration + certificate — no cert or `MsGraphSettings.json` needed. Use `-UseDeviceCode` on a headless host.
 ### Run it
 Always WhatIf-run first.
 ```powershell
 # Lab test — built-in sample data, no tenant needed:
-.\Settings\plugin\Import-EntraAppRegistrations-v1.3.ps1 -UseMockData -WhatIf
-.\Settings\plugin\Import-EntraAppRegistrations-v1.3.ps1 -UseMockData
+.\Settings\plugin\Import-EntraAppRegistrations-v1.1.ps1 -UseMockData -WhatIf
+.\Settings\plugin\Import-EntraAppRegistrations-v1.1.ps1 -UseMockData
 # Live against the tenant:
-.\Settings\plugin\Import-EntraAppRegistrations-v1.3.ps1 -WhatIf
-.\Settings\plugin\Import-EntraAppRegistrations-v1.3.ps1
+.\Settings\plugin\Import-EntraAppRegistrations-v1.1.ps1 -WhatIf
+.\Settings\plugin\Import-EntraAppRegistrations-v1.1.ps1
 ```
 
 | Switch | Effect |
@@ -359,7 +381,7 @@ Always WhatIf-run first.
 ## Microsoft 365 Message Center importer (plugin)
 | Script | Job |
 |--------|-----|
-| `Settings\plugin\Import-M365MessageCenter-v1.1.3.ps1` | Reads Microsoft 365 Message Center advisories via Microsoft Graph and merges the ones that carry a deadline into `Files\db\monitorobjects.json` |
+| `Settings\plugin\Import-M365MessageCenter-v1.1.ps1` | Reads Microsoft 365 Message Center advisories via Microsoft Graph and merges the ones that carry a deadline into `Files\db\monitorobjects.json` |
 Microsoft 365 announces upcoming changes, retirements and required actions in the Message Center. Some of those advisories come with a hard deadline. This plugin pulls them from the tenant so they land in the same watch list as your certificates and secrets.
 It reads every service announcement message and keeps **only the ones that have an `actionRequiredByDateTime`** — a real deadline. That date becomes the object's `expireDate`. No service or severity filter is applied; every advisory with a deadline is imported.
 Fields the Message Center provides map directly:
@@ -376,16 +398,16 @@ The plugin has its own version file, `Settings\plugin\messagecenter\config\versi
 ### Graph permission
 This reads the Message Center, so the app needs the **application permission `ServiceMessage.Read.All`** with admin consent — in addition to the `Mail.Send` the main script uses. Add it to the same app registration in Entra → API permissions → Grant admin consent. Authentication reuses the existing certificate flow (`Settings\Config\MsGraphSettings.json` + `Connect-CalenderReminderGraph`).
 
-A **delegated** variant, `Settings\plugin\Import-M365MessageCenter-Delegated-v1.3.ps1`, does the same job but signs in as a **user** (interactive) instead of an app registration + certificate.
+A **delegated** variant, `Settings\plugin\Import-M365MessageCenter-Delegated-v1.0.ps1`, does the same job but signs in as a **user** (interactive) instead of an app registration + certificate.
 ### Run it
 Always WhatIf-run first.
 ```powershell
 # Lab test — built-in sample advisories, no tenant needed:
-.\Settings\plugin\Import-M365MessageCenter-v1.1.3.ps1 -UseMockData -WhatIf
-.\Settings\plugin\Import-M365MessageCenter-v1.1.3.ps1 -UseMockData
+.\Settings\plugin\Import-M365MessageCenter-v1.1.ps1 -UseMockData -WhatIf
+.\Settings\plugin\Import-M365MessageCenter-v1.1.ps1 -UseMockData
 # Live against the tenant:
-.\Settings\plugin\Import-M365MessageCenter-v1.1.3.ps1 -WhatIf
-.\Settings\plugin\Import-M365MessageCenter-v1.1.3.ps1
+.\Settings\plugin\Import-M365MessageCenter-v1.1.ps1 -WhatIf
+.\Settings\plugin\Import-M365MessageCenter-v1.1.ps1
 ```
 | Switch | Effect |
 |--------|--------|
@@ -420,10 +442,10 @@ Settings\
     - MsGraphSettings.json           Tenant, app and certificate (Mail.Send + Application.Read.All + ServiceMessage.Read.All + Organization.Read.All)
     - version.json                   Tool version + change note + History changelog
   plugin\
-    - Import-EntraAppRegistrations-v1.3.ps1            Import Entra app-reg secret & cert expiry (app-registration auth)
-    - Import-M365MessageCenter-v1.1.3.ps1               Import Message Center advisories (app-registration auth)
-    - Import-EntraAppRegistrations-Delegated-v1.3.ps1 Same, but interactive user sign-in
-    - Import-M365MessageCenter-Delegated-v1.3.ps1     Same, but interactive user sign-in
+    - Import-EntraAppRegistrations-v1.1.ps1            Import Entra app-reg secret & cert expiry (app-registration auth)
+    - Import-M365MessageCenter-v1.1.ps1               Import Message Center advisories (app-registration auth)
+    - Import-EntraAppRegistrations-Delegated-v1.0.ps1 Same, but interactive user sign-in
+    - Import-M365MessageCenter-Delegated-v1.0.ps1     Same, but interactive user sign-in
     entra\config\
       - entra-app-defaults.json          Default field values for Entra-imported objects
       - version.json                     Entra plugin version + change note + History changelog
