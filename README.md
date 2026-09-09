@@ -26,6 +26,9 @@ Built and tested on **PowerShell 7.3.1 (Core)**.
 
 ## What's new
 
+### 1.4
+Beta onprem version : psToDo\BETA-Onprem Exchange
+
 ### 1.3
 - **Kanban mode** deployed.
 - **Report split into five tabs**: **Monitored**, **Completed**, **No channel**, **No credentials**, **Not monitored**.

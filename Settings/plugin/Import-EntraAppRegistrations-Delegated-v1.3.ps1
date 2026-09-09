@@ -93,7 +93,7 @@ $functionFolder        = Join-Path $repoRoot 'Settings\Functions\psToDo'
 
 $expireDateFormat = 'yyyy-MM-dd'
 
-#------------------------------- Helpers -----------------------------
+#------------------------------- Function -----------------------------
 
 # Replace {{token}} placeholders in any string using a lookup table.
 function Expand-Tokens {
