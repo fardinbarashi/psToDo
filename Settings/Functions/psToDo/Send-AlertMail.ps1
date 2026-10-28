@@ -1,4 +1,4 @@
-function Send-AlertMail {
+﻿function Send-AlertMail {
     [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory)] $Alert,
@@ -56,7 +56,8 @@ function Send-AlertMail {
         # Graph puts the useful part in the response body, not the exception message
         $detail = $_.ErrorDetails.Message
         if ($detail) { try { $detail = ($detail | ConvertFrom-Json).error.message } catch { } }
-        Write-Warning "  Mail to $($recipients -join ', ') failed: $($detail ?? $_.Exception.Message)"
+        $reason = if ($detail) { $detail } else { $_.Exception.Message }
+        Write-Warning "  Mail to $($recipients -join ', ') failed: $reason"
         return $false
     }
 }

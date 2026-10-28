@@ -4,7 +4,7 @@
 
 A PowerShell solution that watches expiry dates in a JSON file and alerts a team by **mail** and **Microsoft Teams** before things lapse — certificates, secrets, tokens, host keys, license deadlines, or anything else with a deadline. It also renders a self-contained **HTML status dashboard** for IIS from the same data.
 
-Built and tested on **PowerShell 7.3.1 (Core)**.
+Built and tested on **PowerShell 7.3.1 (Core)**. The scripts avoid PowerShell 7-only syntax and are written to run on Windows PowerShell 5.1 as well.
 
 ---
 
@@ -13,6 +13,7 @@ Built and tested on **PowerShell 7.3.1 (Core)**.
 - [Components](#components)
 - [Requirements](#requirements)
 - [HTML dashboard](#html-dashboard)
+- [Editing in the browser (edit.html)](#editing-in-the-browser-edithtml)
 - [App registration & Graph permissions](#app-registration--graph-permissions)
 - [How alerting works](#how-alerting-works)
 - [Adding an object to monitor](#adding-an-object-to-monitor)
@@ -27,7 +28,15 @@ Built and tested on **PowerShell 7.3.1 (Core)**.
 ## What's new
 
 ### 1.4
-Beta onprem version : psToDo\BETA-Onprem Exchange
+- Beta onprem version : psToDo\BETA-Onprem Exchange
+- **Editable dashboard (`edit.html`)** — the browser editor from the on-prem edition, now with **Teams** support: change objects, triggers, status, mail and Teams settings (including the webhook URL), add, duplicate and delete objects, and save straight back to `monitorobjects.json`. Only members of an AD editors group can save; everyone else who can open the site gets a read-only view. Every save is version-checked, backed up and logged. See [Editing in the browser](#editing-in-the-browser-edithtml).
+- **IIS setup scripts** — `Install-help\Setup-IisReportSecurity.ps1` (Windows sign-in + IIS URL Authorization: only an AD group can open the site) and `Install-help\Setup-IisReportEditor.ps1` (turns on saving). A commented `Files\report\web.config` ships with the repo.
+- **Fixes**
+  - The Entra importers no longer crash on the second run (`Cannot convert null to type "System.DateTime"`) when an app without credentials has already been imported.
+  - Scripts work when run with F8 / "Run Selection" (empty `$PSScriptRoot`): they fall back to the script path, then the current folder.
+  - The HTML report's log file name no longer contains `/` (it created nested folders under `Logs`).
+  - Windows PowerShell 5.1 compatibility: no `-AsArray`, `??` or other PowerShell 7-only syntax, JSON arrays are read and written the 5.1-safe way, and every `.ps1` is saved as UTF-8 with BOM.
+  - The IIS example in this README (`system.web/authorization`) did not protect the static dashboard. It is replaced by IIS URL Authorization and the setup scripts.
 
 ### 1.3
 - **Kanban mode** deployed.
@@ -58,6 +67,7 @@ Beta onprem version : psToDo\BETA-Onprem Exchange
 |--------|-----|
 | `psToDo-v1.3.ps1` | Reads `db\monitorobjects.json`, decides what is due, and sends the alerts based on each object's configuration. |
 | `psToDo-HTML-Report-v1.3.ps1` | Reads `db\monitorobjects.json` and writes an HTML status page. |
+| `psToDo-HTML-Report-Editable-v1.4.ps1` | Writes `edit.html`: the same data as an editable page. Saves go through `Settings\Web\psToDo-api.ashx`. |
 
 ![PstoDo](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/pstodo.jpg)
 
@@ -67,9 +77,9 @@ Beta onprem version : psToDo\BETA-Onprem Exchange
 
 | Requirement | Detail |
 |-------------|--------|
-| PowerShell | **7.3.1 or later (Core)** |
+| PowerShell | **7.3.1 or later (Core)**; written to also run on Windows PowerShell 5.1 |
 | OS | Windows + Task Scheduler |
-| IIS | Only for the HTML dashboard — **restrict who can see the site** (see below) |
+| IIS | Only for the dashboards. Windows Authentication + URL Authorization and an AD group (`Install-help\Setup-IisReportSecurity.ps1`); ASP.NET 4.x only for saving from `edit.html` (`Install-help\Setup-IisReportEditor.ps1`) |
 | Modules | `Microsoft.Graph.Authentication`; the importers also use `Microsoft.Graph.Applications`, `Microsoft.Graph.Devices.ServiceAnnouncement` and `Microsoft.Graph.Identity.DirectoryManagement` (installed automatically on first run) |
 | App reg | Mail needs Graph + a certificate. Teams needs only a webhook URL. |
 
@@ -94,20 +104,82 @@ The dashboard shows each object's expiry **urgency** (expired / critical / warni
 On first run it creates the `Files\report\`, `Files\config\` and `Files\backup\psToDo-HTML-Report\` folders it needs.
 
 ### Restrict who can see the site (IIS)
-Enable **Windows Authentication** on the site and add a `web.config`. The example below allows Domain Admins and denies Domain Users — line up the config sections if you already have some.
+The dashboard lists internal servers, accounts and Teams webhook URLs, so only an AD group should be able to open it. Use **Windows Authentication** together with **IIS URL Authorization** (`system.webServer/security/authorization`). Do **not** use `system.web/authorization`: those rules only apply to ASP.NET requests and do not protect a static `index.html`.
 
+`Install-help\Setup-IisReportSecurity.ps1` does it all (run as Administrator on the IIS server; safe to re-run):
+- installs Windows Authentication and URL Authorization,
+- looks the AD group up (`psToDo-Viewers` by default) and writes `web.config` into the report folder (an existing one is backed up first),
+- turns Windows Authentication on and Anonymous off for the site in `applicationHost.config` (these settings are locked at server level and give HTTP 500.19 if they are put in `web.config`),
+- gives the group and the site's app pool NTFS Read on the report folder (with Windows sign-in IIS reads the page **as the signed-in user**),
+- with `-CreateSite`, creates the site with its own app pool.
+
+```powershell
+.\Install-help\Setup-IisReportSecurity.ps1 -WhatIf
+.\Install-help\Setup-IisReportSecurity.ps1 -Group 'CONTOSO\psToDo-Viewers' -CreateSite -Port 8080
+```
+
+The core of the `web.config` it writes (a commented copy ships in `Files\report\web.config`):
 ```xml
 <configuration>
-  <location path="MyPage.aspx/php/html">
-    <system.web>
+  <system.webServer>
+    <security>
       <authorization>
-        <allow users="DOMAIN\Domain Admins"/>
-        <deny  users="DOMAIN\Domain Users"/>
+        <clear />
+        <add accessType="Allow" roles="CONTOSO\psToDo-Viewers" />
       </authorization>
-    </system.web>
-  </location>
+    </security>
+  </system.webServer>
 </configuration>
 ```
+A user who is added to the group must sign out and in again (new Kerberos ticket). Add an https binding: over plain http the sign-in is protected but the page content is not.
+
+---
+
+## Editing in the browser (edit.html)
+
+`psToDo-HTML-Report-Editable-v1.4.ps1` writes `Files\report\edit.html` next to the dashboard. It shows the same objects as an editable table: name, expiry date, status, triggers and the **Mail** / **Teams** switches inline; target, environment, template, description, the mail settings and the **Teams settings (subject, body, webhook URL)** in each row's detail panel. Objects can be added, duplicated and deleted, and days left, urgency and the checks update while you type. Saving writes `Files\db\monitorobjects.json` directly; the alert script and `index.html` pick the change up on their next run.
+
+| Who | What they get |
+|-----|---------------|
+| Members of the editors group (`psToDo-Editors`) | **Editing**: change, add, duplicate, delete, save |
+| Everyone else the site lets in (`psToDo-Viewers`) | The same page, **read-only** |
+| Page opened as a file, or the save handler is not reachable | The snapshot embedded when the page was generated, read-only, with the reason |
+
+**How saving works.** The page is static; it loads and saves through `psToDo-api.ashx`, a small ASP.NET handler next to it (the editable report copies it from `Settings\Web` on every run). The handler:
+- lets only members of the editors group save (`appSettings` key `psToDo:EditorsGroup`; empty = nobody can save),
+- refuses a save if `monitorobjects.json` changed after the page loaded it, for example by another editor or a plugin run (HTTP 409; the page offers to download your version),
+- checks the data before writing anything: unique id, name, `yyyy-MM-dd` dates, triggers 0–3650, recipients as a list, and an `https://` webhook when Teams is on,
+- backs up the current file to `Files\backup\psToDo\monitorobjects-<time>-web-<user>.json`, then writes a temp file and swaps it in, as UTF-8 with BOM,
+- logs every save (who, when, object count, backup name) to `Logs\psToDo-web-edits.log`,
+- only accepts saves with the header `X-psToDo-Request: 1` from the same origin (CSRF protection).
+
+**Checks on the page** (errors block Save, warnings do not):
+- Errors: no name, invalid date, trigger that is not a whole number 0–3650, duplicate id, invalid e-mail address, a `REPLACE_ME` placeholder address, Teams on with a webhook that does not start with `https://`.
+- Warnings: no date or no triggers (not monitored), mail on without sender or recipients, Teams on without a webhook, and **neither mail nor Teams on** (the object never alerts).
+
+**Duplicate** copies the mail and Teams settings, including the webhook URL (the copy alerts the same channel), and drops the importer fields (`source`, `entraKeyId`, `messageId`, …), so the copy becomes a normal object.
+
+**One-time setup** (as Administrator on the IIS server, after [Restrict who can see the site](#restrict-who-can-see-the-site-iis)):
+1. Create an AD security group for the editors, e.g. `psToDo-Editors`.
+2. Run `Install-help\Setup-IisReportEditor.ps1`. It installs ASP.NET 4.x, sets the app pool to .NET CLR v4.0, lets the editors group into the site, allows `.ashx` through request filtering, writes the `appSettings` the handler reads, and sets NTFS rights: **Modify** for the app pool on `Files\db`, `Files\backup\psToDo` and `Logs` (the handler runs as the app pool), **Read** for the editors on the report folder.
+   ```powershell
+   .\Install-help\Setup-IisReportEditor.ps1 -WhatIf
+   .\Install-help\Setup-IisReportEditor.ps1 -EditorsGroup 'CONTOSO\psToDo-Editors'
+   ```
+3. Run `.\psToDo-HTML-Report-Editable-v1.4.ps1` (add it to the scheduled report task) and open `https://<server>/edit.html`. Members of the editors group see **Editing**.
+
+> **Security:** editors decide who gets alert mail, what it says and which Teams channel webhook receives the alerts. Keep the editors group small. Viewers can see the webhook URLs, just as in `index.html`, and anyone who has a webhook URL can post to that channel.
+
+**Troubleshooting**
+
+| Symptom | Cause / fix |
+|---------|-------------|
+| HTTP 401 | Not in `psToDo-Viewers` / `psToDo-Editors`, or added recently: sign out and in again. |
+| HTTP 500.19 | Windows/Anonymous authentication set in `web.config`, or `--` inside an XML comment. Re-run the setup scripts. |
+| Page shows the *snapshot* / *HTTP 404* | ASP.NET 4.x is missing or `.ashx` is blocked by request filtering: run `Setup-IisReportEditor.ps1`. |
+| *Read-only* for an editor | Not a member of the group in `psToDo:EditorsGroup`, or not signed in again after being added. |
+| Save fails with *access denied* | The app pool lacks Modify on `Files\db`, `Files\backup\psToDo` or `Logs`: re-run `Setup-IisReportEditor.ps1`. |
+| Save refused: *changed by someone else* | Someone (or a plugin run) saved in between. Download your version, Reload, and apply your change again. |
 
 ---
 
@@ -312,8 +384,13 @@ Reads every service announcement message and keeps **only** those with an `actio
 ```
 psToDo-v1.3.ps1                              Evaluate and alert
 psToDo-HTML-Report-v1.3.ps1                  Build the HTML dashboard
-Setup-SenderMailbox-and-AccessPolicy.ps1     Create the alert sender mailbox + access policy (optional)
-Create a self-signed cert to app-reg.ps1     Create the Graph client certificate (optional)
+psToDo-HTML-Report-Editable-v1.4.ps1         Build the editable dashboard (edit.html)
+
+Install-help\
+  Setup-SenderMailbox-and-AccessPolicy.ps1   Create the alert sender mailbox + access policy (optional)
+  Create a self-signed cert to app-reg.ps1   Create the Graph client certificate (optional)
+  Setup-IisReportSecurity.ps1                IIS: Windows sign-in, only an AD group may open the site
+  Setup-IisReportEditor.ps1                  IIS: turn on saving from edit.html for an editors group
 
 Settings\
   Functions\
@@ -332,14 +409,19 @@ Settings\
     Import-M365MessageCenter-Delegated-v1.3.ps1       Same, interactive user sign-in
     entra\config\          entra-app-defaults.json, version.json
     messagecenter\config\  messagecenter-defaults.json, version.json
+  Web\
+    edit-template.html     Template for edit.html
+    psToDo-api.ashx        Load/save handler for edit.html (copied next to it on every run)
 
 Files\
   db\monitorobjects.json               The objects being watched
   config\MonitorObjectComplete.json    Copy of every Completed object + copy date (auto-managed)
   state\sent-state.json                What has already been alerted (auto-managed)
   report\index.html                    Generated dashboard
-  backup\                              Timestamped backups
-Logs\                                  Per-run transcripts
+  report\edit.html                     Generated editable dashboard (+ psToDo-api.ashx)
+  report\web.config                    IIS access control (written by the setup scripts)
+  backup\                              Timestamped backups (also one per save from edit.html)
+Logs\                                  Per-run transcripts + psToDo-web-edits.log (who saved what)
 ```
 
 ---
@@ -351,4 +433,5 @@ Logs\                                  Per-run transcripts
 [x] Delegated (user sign-in) importers for both plugins
 [x] Report tabs — Monitored / Completed / No channel / No credentials / Not monitored
 [x] Completed archive (Files\config\MonitorObjectComplete.json) with per-object copy date
+[x] Editable dashboard (edit.html): AD-group editing incl. Teams settings, version-checked saves
 ```

@@ -1,4 +1,4 @@
-function Initialize-RequiredModules {
+﻿function Initialize-RequiredModules {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]

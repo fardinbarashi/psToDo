@@ -1,4 +1,4 @@
-function Connect-CalenderReminderGraph {
+﻿function Connect-CalenderReminderGraph {
     <#
         App registration setup:
           API permissions -> Microsoft Graph -> Application permissions -> Mail.Send

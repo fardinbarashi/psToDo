@@ -1,4 +1,4 @@
-<#
+﻿<#
 System requirements
     PSVersion  7.3.1 (Core) or later
     PSEdition  Core
@@ -77,10 +77,18 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Windows PowerShell 5.1: without this, arrays can be written as {"value":[...],"Count":n}.
+Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue -WhatIf:$false
+
 #------------------------------- Paths -------------------------------
 
-$pluginRoot = $PSScriptRoot
-$repoRoot   = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+# $PSScriptRoot is empty when the code is run with F8 / "Run Selection" in an editor.
+# Fall back to the script path, then to the current folder.
+$scriptRoot = if ($PSScriptRoot) { $PSScriptRoot }
+              elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
+              else { (Get-Location).Path }
+$pluginRoot = $scriptRoot
+$repoRoot   = (Resolve-Path (Join-Path $scriptRoot '..\..')).Path
 
 $configFolder          = Join-Path (Join-Path $pluginRoot 'messagecenter') 'config'
 $monitoringObjectsPath = Join-Path $repoRoot 'Files\db\monitorobjects.json'
@@ -221,7 +229,7 @@ if (-not (Test-Path $defaultsPath)) { throw "Defaults template not found: $defau
 $defaults = Get-Content -Raw -Encoding UTF8 $defaultsPath | ConvertFrom-Json
 
 if (Test-Path $monitoringObjectsPath) {
-    $existing = @(Get-Content -Raw -Encoding UTF8 $monitoringObjectsPath | ConvertFrom-Json)
+    $existing = @((Get-Content -Raw -Encoding UTF8 $monitoringObjectsPath | ConvertFrom-Json))
 } else {
     Write-Warning "monitorobjects.json not found at $monitoringObjectsPath - starting from an empty list."
     $existing = @()
@@ -352,7 +360,7 @@ if ($PSCmdlet.ShouldProcess($monitoringObjectsPath, "Backup and write $($result.
         Write-Host "- Backup written : $backupTarget" -ForegroundColor DarkGray
     }
 
-    $json = $result | ConvertTo-Json -Depth 20 -AsArray
+    $json = ConvertTo-Json -InputObject @($result) -Depth 20
     Set-Content -Path $monitoringObjectsPath -Value $json -Encoding UTF8
     Write-Host "- Wrote $($result.Count) objects to $monitoringObjectsPath" -ForegroundColor Green
 }

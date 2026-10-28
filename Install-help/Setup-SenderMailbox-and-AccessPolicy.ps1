@@ -1,4 +1,4 @@
-<#
+﻿<#
 System requirements
     PSVersion  7.3.1 (Core) or later
     Module     ExchangeOnlineManagement
@@ -62,7 +62,10 @@ if (-not $ScopeGroupAddress) { $ScopeGroupAddress = "pstodo-senders@$domain" }
 # from the script folder (works even if this script sits in a subfolder like
 # Install-help\). A placeholder value that is not a GUID is ignored.
 if (-not $AppId) {
-    $dir = $PSScriptRoot
+    # $PSScriptRoot is empty when run with F8 / "Run Selection": fall back to the script path, then the current folder.
+    $dir = if ($PSScriptRoot) { $PSScriptRoot }
+           elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
+           else { (Get-Location).Path }
     for ($i = 0; $i -lt 6 -and $dir; $i++) {
         $candidate = Join-Path $dir 'Settings\Config\MsGraphSettings.json'
         if (Test-Path $candidate) {

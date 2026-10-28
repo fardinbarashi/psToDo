@@ -1,4 +1,4 @@
-function Format-AlertAdaptiveCard {
+﻿function Format-AlertAdaptiveCard {
     [CmdletBinding()]
     param([Parameter(Mandatory)] $Alert)
 

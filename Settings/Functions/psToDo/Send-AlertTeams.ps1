@@ -1,4 +1,4 @@
-function Send-AlertTeams {
+﻿function Send-AlertTeams {
     <#
         Posts to a Teams Workflows (Power Automate) webhook.
         No app registration, no token, no Graph permission needed.

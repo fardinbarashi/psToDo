@@ -1,4 +1,4 @@
-function Get-SentState {
+﻿function Get-SentState {
     <#
         Reads sent-state.json into a hashtable. A missing or corrupt file is
         not fatal - it just means every open window alerts again. Better a

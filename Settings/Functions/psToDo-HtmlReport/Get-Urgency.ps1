@@ -1,4 +1,4 @@
-function Get-Urgency {
+﻿function Get-Urgency {
 <#
    Triggers must be sorted ascending. trigger[0] is the smallest, and
    therefore the last alert before expiry - the critical one.

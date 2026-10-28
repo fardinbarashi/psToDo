@@ -1,4 +1,4 @@
-function Save-SentState {
+﻿function Save-SentState {
     <#
         Drops keys for objects that no longer exist, and for expireDate values
         that have changed - a renewed certificate re-arms all of its windows.

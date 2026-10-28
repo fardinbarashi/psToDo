@@ -1,4 +1,4 @@
-
+﻿
 <#
 .DESCRIPTION
     SYSTEM REQUIREMENTS : This script requires PowerShell 5.1 or later and the following modules.
@@ -34,20 +34,35 @@
 #----------------------------------- Settings ------------------------------------------
 [CmdletBinding()]
 param(
-    [string] $JsonPath   = "$PSScriptRoot\Files\db\monitorobjects.json",
-    [string] $CompleteJsonPath = "$PSScriptRoot\Files\config\MonitorObjectComplete.json",
-    [string] $ScriptSettingsPath   = "$PSScriptRoot\Settings\Config\version.json",
+    [string] $JsonPath   = '',
+    [string] $CompleteJsonPath = '',
+    [string] $ScriptSettingsPath   = '',
     [string] $DateFormat = 'yyyy-MM-dd',
     [string] $fileDate = (Get-Date -Format 'yyyy-MM-dd_HH.mm.ss'),
-    [string] $websitePath = "$PSScriptRoot\Files\report\index.html",
-    [string] $backupWebsitePath = "$PSScriptRoot\Files\backup\psToDo-HTML-Report\index-$($fileDate).html",
+    [string] $websitePath = '',
+    [string] $backupWebsitePath = '',
     [string[]] $TriggerKeys = @('1dateTrigger', '2dateTrigger', '3dateTrigger')
 )
 
+# $PSScriptRoot is empty when the code is run with F8 / "Run Selection" in an editor.
+# Fall back to the script path, then to the current folder. The path parameters above
+# default to empty for the same reason: a default value cannot use this fallback.
+$scriptRoot = if ($PSScriptRoot) { $PSScriptRoot }
+              elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
+              else { (Get-Location).Path }
+if ([string]::IsNullOrWhiteSpace($JsonPath))           { $JsonPath           = "$scriptRoot\Files\db\monitorobjects.json" }
+if ([string]::IsNullOrWhiteSpace($CompleteJsonPath))   { $CompleteJsonPath   = "$scriptRoot\Files\config\MonitorObjectComplete.json" }
+if ([string]::IsNullOrWhiteSpace($ScriptSettingsPath)) { $ScriptSettingsPath = "$scriptRoot\Settings\Config\version.json" }
+if ([string]::IsNullOrWhiteSpace($websitePath))        { $websitePath        = "$scriptRoot\Files\report\index.html" }
+if ([string]::IsNullOrWhiteSpace($backupWebsitePath))  { $backupWebsitePath  = "$scriptRoot\Files\backup\psToDo-HTML-Report\index-$($fileDate).html" }
+
+# Windows PowerShell 5.1: without this, arrays can be written as {"value":[...],"Count":n}.
+Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue -WhatIf:$false
+
 # Transcript
 $ScriptName = $MyInvocation.MyCommand.Name
-$LogFileDate = (Get-Date -Format yyyy/MM/dd/HH.mm.ss)
-$TranScriptLogFile = "$PSScriptRoot\Logs\$ScriptName - $LogFileDate.Txt" 
+$LogFileDate = (Get-Date -Format 'yyyy-MM-dd_HH.mm.ss')
+$TranScriptLogFile = "$scriptRoot\Logs\$ScriptName - $LogFileDate.Txt" 
 $StartTranscript = Start-Transcript -Path $TranScriptLogFile -Force
 Get-Date -Format "yyyy/MM/dd HH:mm:ss"
 Write-Host ".. Starting TranScript"
@@ -61,7 +76,7 @@ $ErrorActionPreference = 'Continue'
 
 Write-Host 'Checking required Functions...' -ForegroundColor Yellow
 
-$functionFolder = "$PSScriptRoot\\Settings\Functions\psToDo-HtmlReport"
+$functionFolder = "$scriptRoot\Settings\Functions\psToDo-HtmlReport"
 if (-not (Test-Path $functionFolder)) { throw "Function folder not found: $functionFolder"}
 $functionFiles = Get-ChildItem -Path $functionFolder -Filter '*.ps1' -File
 if (-not $functionFiles) { throw "No .ps1 files found in $functionFolder"}
@@ -119,7 +134,7 @@ function Get-CompleteKey {
 $existingCopyDates = @{}
 if (Test-Path $CompleteJsonPath) {
     try {
-        foreach ($p in @(Get-Content -Raw -Encoding UTF8 $CompleteJsonPath | ConvertFrom-Json)) {
+        foreach ($p in @((Get-Content -Raw -Encoding UTF8 $CompleteJsonPath | ConvertFrom-Json))) {
             if (-not [string]::IsNullOrWhiteSpace($p.copiedDate)) {
                 $existingCopyDates[(Get-CompleteKey $p)] = "$($p.copiedDate)"
             }
@@ -136,13 +151,13 @@ foreach ($o in $completedObjectsRaw) {
 
 $completeDir = Split-Path $CompleteJsonPath -Parent
 if ($completeDir -and -not (Test-Path $completeDir)) { New-Item -ItemType Directory -Force -Path $completeDir | Out-Null }
-$completedObjectsRaw | ConvertTo-Json -Depth 20 -AsArray | Set-Content -Encoding UTF8 $CompleteJsonPath
+ConvertTo-Json -InputObject @($completedObjectsRaw) -Depth 20 | Set-Content -Encoding UTF8 $CompleteJsonPath
 Write-Host "- Copied $($completedObjectsRaw.Count) completed object(s) to $CompleteJsonPath" -ForegroundColor DarkGray
 
 # Re-read the completed objects from the file, so the Completed tab is sourced
 # strictly from MonitorObjectComplete.json.
 $completedObjects = if (Test-Path $CompleteJsonPath) {
-    @(Get-Content -Raw -Encoding UTF8 $CompleteJsonPath | ConvertFrom-Json)
+    @((Get-Content -Raw -Encoding UTF8 $CompleteJsonPath | ConvertFrom-Json))
 } else { @() }
 
 Write-Host $Section... "100%" -ForegroundColor Green
@@ -432,8 +447,8 @@ $generated = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 $sourceEsc = [System.Net.WebUtility]::HtmlEncode($JsonPath)
 # Show the completed-file path relative to the script root (e.g. Files\config\MonitorObjectComplete.json)
 $completeDisplay = $CompleteJsonPath
-if ($PSScriptRoot -and $completeDisplay.StartsWith($PSScriptRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-    $completeDisplay = $completeDisplay.Substring($PSScriptRoot.Length).TrimStart('\', '/')
+if ($scriptRoot -and $completeDisplay.StartsWith($scriptRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+    $completeDisplay = $completeDisplay.Substring($scriptRoot.Length).TrimStart('\', '/')
 }
 $completeSourceEsc = [System.Net.WebUtility]::HtmlEncode($completeDisplay)
 

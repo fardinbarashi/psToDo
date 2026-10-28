@@ -1,4 +1,4 @@
-function Get-AlertPresentation {
+﻿function Get-AlertPresentation {
     # Wording and severity shared by mail and Teams, so the two cannot drift apart
     [CmdletBinding()]
     param([Parameter(Mandatory)] $Alert)

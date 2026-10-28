@@ -1,4 +1,4 @@
-function Send-AlertNotification {
+﻿function Send-AlertNotification {
     # Reads notifyMethodbyMail and notifyMethodbyTeams and dispatches.
     # Two independent ifs, not if/else - both can be true.
     [CmdletBinding(SupportsShouldProcess)]

@@ -1,4 +1,4 @@
-function Format-AlertMailBody {
+﻿function Format-AlertMailBody {
     <#
         Tables and inline styles only: Outlook for Windows renders HTML with the
         Word engine and ignores flexbox and grid.

@@ -1,4 +1,4 @@
-<#
+﻿<#
 System requirements
 PSVersion                      7.3.1
 PSEdition                      Core
@@ -24,22 +24,31 @@ param(
 
 #------------------------------- Settings -------------------------------
 
+# $PSScriptRoot is empty when the code is run with F8 / "Run Selection" in an editor.
+# Fall back to the script path, then to the current folder.
+$scriptRoot = if ($PSScriptRoot) { $PSScriptRoot }
+              elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
+              else { (Get-Location).Path }
+
+# Windows PowerShell 5.1: without this, arrays can be written as {"value":[...],"Count":n}.
+Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue -WhatIf:$false
+
 # Filename and Folderspath
  $scriptName   = $MyInvocation.MyCommand.Name # Scriptname
- $logFolder    = "$PSScriptRoot\Logs" # Log Path
- $reportFolder = "$PSScriptRoot\Files\report" # Report Path
- $stateFolder  = "$PSScriptRoot\Files\state" # State Path
+ $logFolder    = "$scriptRoot\Logs" # Log Path
+ $reportFolder = "$scriptRoot\Files\report" # Report Path
+ $stateFolder  = "$scriptRoot\Files\state" # State Path
 
 # Monitoring objects, Configration and State file path
- $monitoringObjectsPath = "$PSScriptRoot\Files\db\monitorobjects.json"
- $graphSettingsPath     = "$PSScriptRoot\Settings\Config\MsGraphSettings.json"
+ $monitoringObjectsPath = "$scriptRoot\Files\db\monitorobjects.json"
+ $graphSettingsPath     = "$scriptRoot\Settings\Config\MsGraphSettings.json"
  $statePath             = "$stateFolder\sent-state.json"
- $scriptSettingsPath = "$PSScriptRoot\Settings\Config\version.json"
+ $scriptSettingsPath = "$scriptRoot\Settings\Config\version.json"
 
 # backup paths for monitorobjects.json, sent-state.json
-  $backupMonitorObjectPath = "$PSScriptRoot\Files\backup\psToDo\"
-  $backupSendStateJsonPath = "$PSScriptRoot\Files\backup\psToDo\"
-  $backupMsGraphSettingsPath = "$PSScriptRoot\Files\backup\psToDo\"
+  $backupMonitorObjectPath = "$scriptRoot\Files\backup\psToDo\"
+  $backupSendStateJsonPath = "$scriptRoot\Files\backup\psToDo\"
+  $backupMsGraphSettingsPath = "$scriptRoot\Files\backup\psToDo\"
 
 # Ensure the folders the script writes to exist (first-run safe)
  foreach ($dir in @($logFolder, $stateFolder, $reportFolder, $backupMonitorObjectPath)) {
@@ -71,7 +80,7 @@ $ErrorActionPreference = 'Continue'
 
 Write-Host 'Checking required Functions...' -ForegroundColor Yellow
 
-$functionFolder = "$PSScriptRoot\Settings\Functions\psToDo"
+$functionFolder = "$scriptRoot\Settings\Functions\psToDo"
 if (-not (Test-Path $functionFolder)) { throw "Function folder not found: $functionFolder"}
 $functionFiles = Get-ChildItem -Path $functionFolder -Filter '*.ps1' -File
 if (-not $functionFiles) { throw "No .ps1 files found in $functionFolder"}

@@ -1,4 +1,4 @@
-
+﻿
        $cert = New-SelfSignedCertificate `
        -Subject           'CN=PsToDo' `
        -CertStoreLocation 'Cert:\LocalMachine\My' `
