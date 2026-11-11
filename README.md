@@ -112,6 +112,10 @@ The dashboard opens on **Overview**: key facts in the header, one card per urgen
 **Other** in the menu **exports the rows you see to CSV** (UTF-8; `;` as separator when Windows uses a decimal comma, so Excel opens it directly) and **prints** (a light, compact layout). Members of the editors group also get **Edit data** and **Tools** (in the menu and as tabs). Edit data opens the editor (`edit.html`) inside the dashboard; *Edit* in an object's details jumps straight to that object. The page asks `psToDo-api.ashx?action=whoami` whether you may edit, so viewers never see it. The page follows the light/dark setting of Windows until you choose Dark theme or Light theme under **Other**; that choice is remembered in the browser and also applies to the editor. If the page is older than `StaleAfterHours` (24 h), a red banner says that the scheduled report run has probably stopped.
 
 Teams webhook URLs are **shortened** in `index.html` (`https://host/…abcd`): anyone who has a webhook URL can post to that channel, and the dashboard is often open to more people than the editors. The full URL is shown in `edit.html` only.
+![logo](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/1.jpg)
+![logo](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/2.jpg)
+![logo](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/3.jpg)
+![logo](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/4.jpg)
 
 **`Settings\Config\ReportSettings.json`:**
 
