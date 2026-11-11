@@ -1,9 +1,5 @@
 ﻿function Get-SentState {
-    <#
-        Reads sent-state.json into a hashtable. A missing or corrupt file is
-        not fatal - it just means every open window alerts again. Better a
-        duplicate mail than a silently dropped one.
-    #>
+    # Missing or corrupt file = empty state
     [CmdletBinding()]
     param([Parameter(Mandatory)] [string] $Path)
 

@@ -29,9 +29,7 @@ Behaviour
          - objects previously imported from Entra (matched on entraKeyId) get
            their expireDate refreshed (unless -NoDateRefresh)
          - brand-new credentials are appended with a fresh numeric id
-       Imported objects carry two extra fields, "source" and "entraKeyId",
-       so re-runs are idempotent. The existing psToDo scripts ignore unknown
-       fields, so this is safe.
+       Imported objects carry "source" and "entraKeyId" so re-runs update them.
 
 Authentication (delegated - no app registration or certificate needed)
     Signs in as a user with Connect-MgGraph, using the built-in Microsoft Graph
@@ -78,13 +76,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Windows PowerShell 5.1: without this, arrays can be written as {"value":[...],"Count":n}.
 Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue -WhatIf:$false
 
 #------------------------------- Paths -------------------------------
 
-# $PSScriptRoot is empty when the code is run with F8 / "Run Selection" in an editor.
-# Fall back to the script path, then to the current folder.
 $scriptRoot = if ($PSScriptRoot) { $PSScriptRoot }
               elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
               else { (Get-Location).Path }
@@ -103,7 +98,6 @@ $expireDateFormat = 'yyyy-MM-dd'
 
 #------------------------------- Function -----------------------------
 
-# Replace {{token}} placeholders in any string using a lookup table.
 function Expand-Tokens {
     param(
         [string] $Text,
@@ -125,8 +119,7 @@ function New-MonitorObjectFromCredential {
         [string] $Environment                 # "Entra - <tenant name> - <tenant id>"; falls back to the default
     )
 
-    # An app with no secrets and no certificates has nothing that expires.
-    # It is still listed (as an inventory row) but never alerts.
+        # No credentials: inventory row, never alerts
     $isEmpty = [bool]$Credential.NoCredentials
     $expire  = if ($isEmpty) { '' } else { ([datetime]$Credential.ExpireDate).ToString($expireDateFormat) }
     $env     = if ([string]::IsNullOrWhiteSpace($Environment)) { $Defaults.environment } else { $Environment }
@@ -174,7 +167,7 @@ function New-MonitorObjectFromCredential {
     }
 }
 
-# Flatten Entra applications into a flat list of credentials to monitor.
+# One entry per credential
 function Get-CredentialListFromApps {
     param([Parameter(Mandatory)] $Apps)
 
@@ -226,7 +219,7 @@ function Get-CredentialListFromApps {
     return $list
 }
 
-# Built-in sample data so the merge/backup logic can be tested without a tenant.
+# Sample data for -UseMockData
 function Get-MockApps {
     [pscustomobject]@{
         DisplayName = 'psToDo-Graph-Connector'
@@ -289,8 +282,7 @@ function Connect-DelegatedGraph {
     )
 
     if ($Credential) {
-        # Username/password (ROPC). Requires a public-client app registration (ClientId) and a tenant
-        # that allows ROPC. Does NOT work with MFA or guest/personal accounts - use interactive if it fails.
+                # ROPC: needs -ClientId and -TenantId, no MFA
         if (-not $ClientId -or -not $TenantId) {
             throw "Username/password sign-in needs -ClientId (a public client app) and -TenantId."
         }

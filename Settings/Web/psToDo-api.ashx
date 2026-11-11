@@ -1,32 +1,13 @@
 <%@ WebHandler Language="C#" Class="PsToDoApi" %>
 <%@ Assembly Name="System.Web.Extensions, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35" %>
-// ---------------------------------------------------------------------------------
-// psToDo - save endpoint for the editable dashboard (edit.html)
-//
-// Lives next to edit.html in the IIS site. psToDo-HTML-Report-Editable-v1.4.ps1 copies
-// it there from Settings\Web on every run; edit THIS copy, not the one in the site.
-//
-//   GET  psToDo-api.ashx?action=load  -> {"version","canEdit","user","editorsGroup","data":[...]}
-//   POST psToDo-api.ashx?action=save  -> body {"version":"<from load>","json":"<whole file text>"}
-//
-// Who may do what:
-//   - Reading: everyone IIS lets in (web.config URL Authorization: viewers + editors).
-//   - Saving : only members of the group in appSettings "psToDo:EditorsGroup".
-//              No group configured = nobody can save.
-//
-// Safety:
-//   - The page must send the version (SHA-256 of the file) it loaded. If the file changed
-//     since (another editor, a plugin run) the save is refused with 409 - nothing is lost.
-//   - Every save first copies the current file to the backup folder, then writes the new
-//     text to a temp file and swaps it in, so the main script never reads half a file.
-//   - Every save is logged (who, when, object count, backup name) to psToDo:EditLog.
-//   - POST requires the header X-psToDo-Request: 1 and a JSON body. A browser cannot send
-//     that cross-site without CORS, which this handler never allows (CSRF protection).
-//
-// Runs as the IIS app pool identity: it needs Modify on the db folder, the backup folder
-// and the log folder (Install-help\Setup-IisReportEditor.ps1 grants this).
-// Written for .NET Framework 4.x / C# 5 (the compiler ASP.NET uses on Windows Server).
-// ---------------------------------------------------------------------------------
+// psToDo - load/save handler for edit.html. Copied next to edit.html by
+// psToDo-HTML-Report-Editable-v1.3.ps1; edit the copy in Settings\Web.
+//   GET  ?action=load   -> {"version","canEdit","user","editorsGroup","data":[...]}
+//   GET  ?action=whoami -> {"canEdit","user"}
+//   POST ?action=save   -> body {"version","json"}
+// Saving: members of appSettings psToDo:EditorsGroup only. Version check (409 on
+// conflict), backup before write, edit log. POST needs X-psToDo-Request: 1 and JSON.
+// .NET Framework 4.x / C# 5.
 
 using System;
 using System.Collections;
@@ -67,14 +48,23 @@ public class PsToDoApi : IHttpHandler
             string method = ctx.Request.HttpMethod;
 
             if (action == "load" && method == "GET") { Load(ctx); return; }
+            if (action == "whoami" && method == "GET") { WhoAmI(ctx); return; }
             if (action == "save" && method == "POST") { Save(ctx); return; }
 
-            Fail(ctx, 405, "bad-request", "Use GET ?action=load or POST ?action=save.");
+            Fail(ctx, 405, "bad-request", "Use GET ?action=load, GET ?action=whoami or POST ?action=save.");
         }
         catch (Exception ex)
         {
             Fail(ctx, 500, "server-error", ex.GetType().Name + ": " + ex.Message);
         }
+    }
+
+    // ------------------------------------------------------------------ whoami
+
+    private void WhoAmI(HttpContext ctx)
+    {
+        ctx.Response.StatusCode = 200;
+        ctx.Response.Write("{\"canEdit\":" + (CanEdit(ctx) ? "true" : "false") + ",\"user\":" + Q(ctx.User.Identity.Name) + "}");
     }
 
     // ------------------------------------------------------------------ load
@@ -101,7 +91,6 @@ public class PsToDoApi : IHttpHandler
             Fail(ctx, 500, "db-invalid", "monitorobjects.json is not valid JSON: " + ex.Message);
             return;
         }
-        // A file holding one object (not an array) is still valid psToDo data.
         if (!(parsed is object[])) text = "[" + text + "]";
 
         string group = EditorsGroup();
@@ -129,14 +118,14 @@ public class PsToDoApi : IHttpHandler
             return;
         }
 
-        // CSRF: a custom header and a JSON content type cannot be sent cross-site without CORS.
+        // CSRF
         if (ctx.Request.Headers["X-psToDo-Request"] != "1" ||
             !(ctx.Request.ContentType ?? "").StartsWith("application/json", StringComparison.OrdinalIgnoreCase))
         {
             Fail(ctx, 400, "bad-request", "Missing X-psToDo-Request header or JSON content type.");
             return;
         }
-        // Same-origin check against the Host header the browser sent (works behind load balancers too).
+        // Same origin
         string origin = ctx.Request.Headers["Origin"];
         string host = ctx.Request.Headers["Host"];
         if (string.IsNullOrEmpty(host)) host = ctx.Request.Url.Authority;
@@ -171,7 +160,6 @@ public class PsToDoApi : IHttpHandler
         string baseVersion = req.ContainsKey("version") ? Convert.ToString(req["version"], CultureInfo.InvariantCulture) : "";
         string newText = ((string)req["json"]).Trim();
 
-        // Validate the new file content before touching anything.
         object parsedNew;
         try { parsedNew = js.DeserializeObject(newText); }
         catch (Exception ex) { Fail(ctx, 400, "bad-json", "The new content is not valid JSON: " + ex.Message); return; }
@@ -211,8 +199,7 @@ public class PsToDoApi : IHttpHandler
             }
             catch { oldCount = -1; }
 
-            // 1. Backup of the current file. Two saves in the same second get -2, -3 ...
-            //    so a backup is never overwritten.
+            // 1. Backup (-2, -3 ... within the same second)
             if (current.Length > 0)
             {
                 Directory.CreateDirectory(backupFolder);
@@ -224,7 +211,7 @@ public class PsToDoApi : IHttpHandler
                 File.WriteAllBytes(Path.Combine(backupFolder, backupName), current);
             }
 
-            // 2. Write to a temp file in the same folder, then swap it in.
+            // 2. Temp file, then swap
             string dir = Path.GetDirectoryName(dbPath);
             Directory.CreateDirectory(dir);
             string temp = Path.Combine(dir, "monitorobjects.json.tmp-" + Guid.NewGuid().ToString("N"));
@@ -300,8 +287,7 @@ public class PsToDoApi : IHttpHandler
                     errors.Add(label + ": mailRecipients must be a list.");
             }
 
-            // Teams posts to a Workflows webhook. When Teams is on for the object, the URL
-            // must be https (an empty URL is allowed here; the page warns about it).
+            // Teams on: webhook must be https (empty is allowed)
             if (o.ContainsKey("teams") && o["teams"] != null)
             {
                 var teams = o["teams"] as Dictionary<string, object>;
@@ -317,8 +303,7 @@ public class PsToDoApi : IHttpHandler
         return errors;
     }
 
-    // Same rules as Test-NotifyFlag in the PowerShell scripts: a real boolean, or the text
-    // true / 1 / yes / ja. Anything else (including a missing value) means off.
+    // Same rules as Test-NotifyFlag
     private static bool NotifyOn(Dictionary<string, object> o, string key)
     {
         if (!o.ContainsKey(key) || o[key] == null) return false;
@@ -328,7 +313,7 @@ public class PsToDoApi : IHttpHandler
         return s == "true" || s == "1" || s == "yes" || s == "ja";
     }
 
-    // ------------------------------------------------------------------ helpers
+    // ------------------------------------------------------------------ common
 
     private static JavaScriptSerializer Serializer()
     {
@@ -350,7 +335,7 @@ public class PsToDoApi : IHttpHandler
         return Path.GetFullPath(Path.Combine(ctx.Server.MapPath("~"), p));
     }
 
-    // Defaults assume the site points at <psToDo>\Files\report.
+    // Defaults: the site points at <psToDo>\Files\report
     private static string DbPath(HttpContext ctx)       { return Resolve(ctx, Setting("psToDo:DbPath", @"..\db\monitorobjects.json")); }
     private static string BackupFolder(HttpContext ctx) { return Resolve(ctx, Setting("psToDo:BackupFolder", @"..\backup\psToDo")); }
     private static string EditLog(HttpContext ctx)      { return Resolve(ctx, Setting("psToDo:EditLog", @"..\..\Logs\psToDo-web-edits.log")); }
@@ -361,7 +346,7 @@ public class PsToDoApi : IHttpHandler
         string group = EditorsGroup();
         if (group.Length == 0) return false;
         try { return ctx.User.IsInRole(group); }
-        catch { return false; }   // a group name that cannot be resolved = no edit rights
+        catch { return false; }
     }
 
     private static void Audit(HttpContext ctx, string line)
@@ -375,7 +360,7 @@ public class PsToDoApi : IHttpHandler
                 File.AppendAllText(path, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + "  " + line + Environment.NewLine, new UTF8Encoding(false));
             }
         }
-        catch { /* the save itself succeeded; a missing log must not turn it into an error */ }
+        catch { }
     }
 
     private static string DecodeUtf8(byte[] bytes)
@@ -407,7 +392,7 @@ public class PsToDoApi : IHttpHandler
         return sb.Length == 0 ? "unknown" : sb.ToString();
     }
 
-    // JSON string literal. < > & are escaped too, so the output is safe inside HTML as well.
+    // JSON string, < > & escaped
     private static string Q(string s)
     {
         var sb = new StringBuilder("\"");

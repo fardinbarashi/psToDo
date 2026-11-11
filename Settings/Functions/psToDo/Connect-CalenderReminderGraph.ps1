@@ -1,13 +1,5 @@
 ﻿function Connect-CalenderReminderGraph {
-    <#
-        App registration setup:
-          API permissions -> Microsoft Graph -> Application permissions -> Mail.Send
-          Grant admin consent
-          Certificates & secrets -> upload the public .cer
-
-        Mail.Send as an application permission lets the app send as ANY mailbox
-        in the tenant. Scope it down with New-ApplicationAccessPolicy.
-    #>
+    # Mail.Send (application). Scope it with New-ApplicationAccessPolicy.
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $TenantId,
@@ -19,11 +11,7 @@
         throw "Certificate $($Certificate.Thumbprint) has no private key. Graph cannot sign the token."
     }
 
-    # HasPrivateKey can be true while the key is unusable. That is what
-    # "Keyset does not exist" from Connect-MgGraph means: the account running
-    # this script lacks Read on the key file under
-    # %ProgramData%\Microsoft\Crypto\Keys
-    # GetRSAPrivateKey, not .PrivateKey: the latter returns $null for CNG keys.
+    # "Keyset does not exist" = no Read on %ProgramData%\Microsoft\Crypto\Keys
     try {
         try {
     $rsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($Certificate)

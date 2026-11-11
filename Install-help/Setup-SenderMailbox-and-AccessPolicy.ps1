@@ -3,7 +3,7 @@ System requirements
     PSVersion  7.3.1 (Core) or later
     Module     ExchangeOnlineManagement
 
-psToDo setup helper : Setup-SenderMailbox-and-AccessPolicy
+psToDo setup : Setup-SenderMailbox-and-AccessPolicy
     Author  : Fardin Barashi
     Purpose : Create a dedicated shared mailbox for psToDo alerts and lock the
               app registration to it with an Application Access Policy, so the
@@ -21,8 +21,7 @@ What it does
        that group.
     5. Tests the policy against the shared mailbox.
 
-    Each step is skipped if the object already exists, so the script is safe to
-    re-run.
+    Existing objects are skipped. Safe to re-run.
 
 Parameters
     -SharedMailboxAddress   Address to send alerts from, e.g. pstodo-noreply@contoso.com  (required)
@@ -58,12 +57,9 @@ if ([string]::IsNullOrWhiteSpace($domain) -or $domain -eq $SharedMailboxAddress)
 }
 if (-not $ScopeGroupAddress) { $ScopeGroupAddress = "pstodo-senders@$domain" }
 
-# AppId: use the parameter, otherwise find MsGraphSettings.json by walking up
-# from the script folder (works even if this script sits in a subfolder like
-# Install-help\). A placeholder value that is not a GUID is ignored.
+# AppId from the parameter or MsGraphSettings.json
 if (-not $AppId) {
-    # $PSScriptRoot is empty when run with F8 / "Run Selection": fall back to the script path, then the current folder.
-    $dir = if ($PSScriptRoot) { $PSScriptRoot }
+        $dir = if ($PSScriptRoot) { $PSScriptRoot }
            elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
            else { (Get-Location).Path }
     for ($i = 0; $i -lt 6 -and $dir; $i++) {
@@ -109,7 +105,7 @@ if ($mbx) {
     New-Mailbox -Shared -Name $SharedMailboxDisplayName -DisplayName $SharedMailboxDisplayName -PrimarySmtpAddress $SharedMailboxAddress | Out-Null
     Write-Host "- Shared mailbox created." -ForegroundColor Green
 
-    # Provisioning is async; wait until it is queryable before using it.
+    # Wait for the mailbox
     for ($i = 0; $i -lt 12 -and -not $mbx; $i++) {
         Start-Sleep -Seconds 5
         $mbx = Get-Mailbox -Identity $SharedMailboxAddress -ErrorAction SilentlyContinue
@@ -128,7 +124,7 @@ if ($group) {
     Start-Sleep -Seconds 5
 }
 
-# Ensure the shared mailbox is a member of the group.
+# Add the mailbox to the group
 if ($PSCmdlet.ShouldProcess($ScopeGroupAddress, "Add $SharedMailboxAddress as member")) {
     try {
         Add-DistributionGroupMember -Identity $ScopeGroupAddress -Member $SharedMailboxAddress -ErrorAction Stop

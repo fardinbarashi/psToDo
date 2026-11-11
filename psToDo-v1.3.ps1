@@ -24,13 +24,10 @@ param(
 
 #------------------------------- Settings -------------------------------
 
-# $PSScriptRoot is empty when the code is run with F8 / "Run Selection" in an editor.
-# Fall back to the script path, then to the current folder.
 $scriptRoot = if ($PSScriptRoot) { $PSScriptRoot }
               elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
               else { (Get-Location).Path }
 
-# Windows PowerShell 5.1: without this, arrays can be written as {"value":[...],"Count":n}.
 Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue -WhatIf:$false
 
 # Filename and Folderspath
@@ -50,7 +47,7 @@ Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue -WhatIf:$fa
   $backupSendStateJsonPath = "$scriptRoot\Files\backup\psToDo\"
   $backupMsGraphSettingsPath = "$scriptRoot\Files\backup\psToDo\"
 
-# Ensure the folders the script writes to exist (first-run safe)
+# Create folders on first run
  foreach ($dir in @($logFolder, $stateFolder, $reportFolder, $backupMonitorObjectPath)) {
      if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
  }
@@ -146,7 +143,7 @@ try {
       foreach ($object in $monitoringObjects) 
        {
          $label = "Object $($object.id) - $($object.name)"
-        # --- Validate and parse expireDate ---
+        # Parse expireDate
         if ([string]::IsNullOrWhiteSpace($object.expireDate)) {
          Write-Warning "--> $label is missing expireDate - skipping."
          continue
@@ -166,12 +163,11 @@ try {
 
         $daysLeft = ($expireDate - $today).Days
 
-        # Prefix for every state key belonging to this object at this expiry date.
-        # Renewing the changes the prefix, retiring the old keys.
+        # State key prefix: id + expireDate
         $keyPrefix = "$($object.id)_$($object.expireDate)"
         $liveKeys.Add($keyPrefix)
 
-        # --- Collect triggers. Quoted access: the keys start with a digit. ---
+        # Triggers (keys start with a digit, so quoted access)
         $rawTriggers = foreach ($key in $triggerKeys) { $object.$key }
 
         [int[]] $triggers = $rawTriggers |
@@ -187,11 +183,10 @@ try {
         # ascending order      
         $declared = @($rawTriggers | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { [int]$_ })
         if (($declared -join ',') -ne (($declared | Sort-Object) -join ',')) {
-            Write-Warning "--> $label declares triggers out of order ($($declared -join ', ')). Sorted automatically." # order-independent, but a mismatch is flagging.
+            Write-Warning "--> $label declares triggers out of order ($($declared -join ', ')). Sorted automatically."
         }
 
-        # --- The narrowest open window. Triggers are ascending, so the first
-        $hit = $triggers | Where-Object { $daysLeft -le $_ -and $daysLeft -ge 0 } | Select-Object -First 1  #  match is the smallest trigger that still covers daysLeft. ---
+                $hit = $triggers | Where-Object { $daysLeft -le $_ -and $daysLeft -ge 0 } | Select-Object -First 1  # smallest trigger that covers daysLeft
         $expiredNotifyDay = ($daysLeft -lt 0) -and ($daysLeft % $expiredNotifyDays -eq 0)
         $expiryDay  = ($daysLeft -eq 0)
 
@@ -328,7 +323,7 @@ if ($alerts.Count) {
                 Write-Host "   $($alert.id) - $($alert.name) [$($alert.urgency)]" -ForegroundColor Cyan
                 $r = Send-AlertNotification -Alert $alert
                 $results.Add($r)
-                if (-not $WhatIfPreference -and ($r.MailSent -or $r.TeamsSent)) { $state[$alert.stateKey] = (Get-Date).ToString('o') }# Record only what actually went out. A failed send stays unrecorded, so the next run tries again. -WhatIf never records.
+                if (-not $WhatIfPreference -and ($r.MailSent -or $r.TeamsSent)) { $state[$alert.stateKey] = (Get-Date).ToString('o') }# Record only sent alerts. -WhatIf never records.
             }
             Write-Host ''
         }
@@ -386,8 +381,7 @@ try {
     Get-Date -Format 'yyyy/MM/dd HH:mm:ss'
     Write-Host "Start $Section ... 0%" -ForegroundColor Yellow
 
-    # Create a backup of the monitorobjects.json and sent-state.json files with a timestamp in the filename.
-    # Each copy is guarded: a file that does not exist yet (e.g. sent-state.json on a first run) is skipped, not fatal.
+    # Backup monitorobjects.json, sent-state.json and MsGraphSettings.json
     $backupfileDate = Get-Date -Format 'yyyy-MM-dd_HH.mm.ss'
     if (-not (Test-Path $backupMonitorObjectPath)) { New-Item -ItemType Directory -Path $backupMonitorObjectPath -Force | Out-Null }
 

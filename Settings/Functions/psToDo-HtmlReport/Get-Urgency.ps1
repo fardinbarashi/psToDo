@@ -1,10 +1,5 @@
 ﻿function Get-Urgency {
-<#
-   Triggers must be sorted ascending. trigger[0] is the smallest, and
-   therefore the last alert before expiry - the critical one.
-   Objects with fewer than three triggers degrade gracefully:
-   the highest defined level is used as the outer boundary.
-#>
+# Triggers sorted ascending: trigger[0] = critical, trigger[1] = warning
     param([int] $DaysLeft, [int[]] $Triggers)
 
     if ($DaysLeft -lt 0) { return 'expired' }

@@ -1,29 +1,31 @@
 ﻿
 <#
 .DESCRIPTION
-    SYSTEM REQUIREMENTS : This script requires PowerShell 5.1 or later and the following modules.
+    SYSTEM REQUIREMENTS : PowerShell 5.1 or later.
 
-    This script is designed to read the monitorobjects.json file and generate a HTML report based on the data. 
-    The report provides a visual representation of the status of monitored objects, 
-    indicating whether they are expired, critical, warning, or ok based on their defined triggers.
-    
-    Reads monitorobjects.json and writes a HTML report to web-servers
-    Change the $websitePath parameters to write to a web server's document root.
+    Reads monitorobjects.json and writes the HTML dashboard (index.html).
+    Change $websitePath to write to a web server's document root.
 
-    Status is derived from the object's own triggers, sorted ascending.
-    The smallest trigger is the most urgent because it sits closest to expiry.
-        daysLeft < 0            -> expired
-        daysLeft <= datetrigger1  -> critical
-        daysLeft <= datetrigger2  -> warning
-        otherwise <= datetrigger3  -> > ok
+    Urgency per object, from its own triggers (sorted ascending):
+        daysLeft < 0             -> expired
+        daysLeft <= datetrigger1 -> critical
+        daysLeft <= datetrigger2 -> warning
+        otherwise                -> ok
+
+    Page template : Settings\Web\report-template.html
+    Settings      : Settings\Config\ReportSettings.json
+    Sent alerts   : Files\state\sent-state.json (written by psToDo-v1.3.ps1)
 
 .EXAMPLE
-    .\CalenderReminderHtmlReport.ps1 -Open
+    .\psToDo-HTML-Report-v1.3.ps1
+
+.EXAMPLE
+    .\psToDo-HTML-Report-v1.3.ps1 -OrganizationName 'CONTOSO' -LogoPath '.\Settings\Config\logo.png'
 
 .NOTES
     Author : Fardin Barashi
-    Title : CalenderReminderHtmlReport
-    Version : 1.3
+    Title : CalendarReminderHtmlReport
+    Version : 1.5
       Release day : 2026-06-22
       Github Link  : https://github.com/fardinbarashi
 
@@ -41,12 +43,14 @@ param(
     [string] $fileDate = (Get-Date -Format 'yyyy-MM-dd_HH.mm.ss'),
     [string] $websitePath = '',
     [string] $backupWebsitePath = '',
-    [string[]] $TriggerKeys = @('1dateTrigger', '2dateTrigger', '3dateTrigger')
+    [string[]] $TriggerKeys = @('1dateTrigger', '2dateTrigger', '3dateTrigger'),
+    [string] $StatePath = '',
+    [string] $ReportSettingsPath = '',
+    [string] $TemplatePath = '',
+    [string] $OrganizationName = '',
+    [string] $LogoPath = ''
 )
 
-# $PSScriptRoot is empty when the code is run with F8 / "Run Selection" in an editor.
-# Fall back to the script path, then to the current folder. The path parameters above
-# default to empty for the same reason: a default value cannot use this fallback.
 $scriptRoot = if ($PSScriptRoot) { $PSScriptRoot }
               elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
               else { (Get-Location).Path }
@@ -55,8 +59,10 @@ if ([string]::IsNullOrWhiteSpace($CompleteJsonPath))   { $CompleteJsonPath   = "
 if ([string]::IsNullOrWhiteSpace($ScriptSettingsPath)) { $ScriptSettingsPath = "$scriptRoot\Settings\Config\version.json" }
 if ([string]::IsNullOrWhiteSpace($websitePath))        { $websitePath        = "$scriptRoot\Files\report\index.html" }
 if ([string]::IsNullOrWhiteSpace($backupWebsitePath))  { $backupWebsitePath  = "$scriptRoot\Files\backup\psToDo-HTML-Report\index-$($fileDate).html" }
+if ([string]::IsNullOrWhiteSpace($StatePath))          { $StatePath          = "$scriptRoot\Files\state\sent-state.json" }
+if ([string]::IsNullOrWhiteSpace($ReportSettingsPath)) { $ReportSettingsPath = "$scriptRoot\Settings\Config\ReportSettings.json" }
+if ([string]::IsNullOrWhiteSpace($TemplatePath))       { $TemplatePath       = "$scriptRoot\Settings\Web\report-template.html" }
 
-# Windows PowerShell 5.1: without this, arrays can be written as {"value":[...],"Count":n}.
 Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue -WhatIf:$false
 
 # Transcript
@@ -114,13 +120,10 @@ try {
 catch { throw "Failed to parse JSON in '$JsonPath': $($_.Exception.Message)"}
 if (-not $monitoringObjects) { throw 'The monitoring objects file is empty or contains no objects.' }
 
-# Split completed objects out and COPY them to MonitorObjectComplete.json.
-# This is a copy, not a move: the completed objects stay in monitorobjects.json.
-# The Completed tab is then built ONLY from MonitorObjectComplete.json.
+# Copy Completed objects to MonitorObjectComplete.json
 $completedObjectsRaw = @($monitoringObjects | Where-Object { "$($_.status)" -ieq 'Completed' })
 $monitoredObjectsRaw = @($monitoringObjects | Where-Object { "$($_.status)" -ine 'Completed' })
 
-# Stable identity for an object across runs (so we can keep its original copy date).
 function Get-CompleteKey {
     param($o)
     foreach ($k in @($o.entraKeyId, $o.messageId, $o.appId)) {
@@ -129,8 +132,7 @@ function Get-CompleteKey {
     return ('{0}|{1}|{2}' -f $o.name, $o.servername, $o.expireDate)
 }
 
-# Preserve the date each object was FIRST copied over: read any existing dates
-# from the current MonitorObjectComplete.json before we rewrite it.
+# Keep the first copy date
 $existingCopyDates = @{}
 if (Test-Path $CompleteJsonPath) {
     try {
@@ -154,8 +156,6 @@ if ($completeDir -and -not (Test-Path $completeDir)) { New-Item -ItemType Direct
 ConvertTo-Json -InputObject @($completedObjectsRaw) -Depth 20 | Set-Content -Encoding UTF8 $CompleteJsonPath
 Write-Host "- Copied $($completedObjectsRaw.Count) completed object(s) to $CompleteJsonPath" -ForegroundColor DarkGray
 
-# Re-read the completed objects from the file, so the Completed tab is sourced
-# strictly from MonitorObjectComplete.json.
 $completedObjects = if (Test-Path $CompleteJsonPath) {
     @((Get-Content -Raw -Encoding UTF8 $CompleteJsonPath | ConvertFrom-Json))
 } else { @() }
@@ -184,19 +184,32 @@ Try
 
  # Run Query
 $today         = (Get-Date).Date
+
+# Sent state from psToDo-v1.3.ps1
+$sentState = @{}
+if (Test-Path $StatePath) {
+    try {
+        $rawState = Get-Content -Raw -Encoding UTF8 $StatePath
+        if (-not [string]::IsNullOrWhiteSpace($rawState)) {
+            ($rawState | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $sentState[$_.Name] = $_.Value }
+        }
+        Write-Host "- Sent state: $($sentState.Count) alert(s) recorded in $StatePath" -ForegroundColor DarkGray
+    } catch { Write-Warning "Could not read $StatePath - Next alert / Last alerted assume nothing was sent. $($_.Exception.Message)" }
+} else { Write-Host "- No sent state yet ($StatePath)." -ForegroundColor DarkGray }
+
 $rows          = [System.Collections.Generic.List[object]]::new()
 $completedRows = [System.Collections.Generic.List[object]]::new()
 $invalid       = [System.Collections.Generic.List[object]]::new()
 $noCreds       = [System.Collections.Generic.List[object]]::new()
 $placeholder   = 0
 
-# Minimal "inventory" row for an object with no usable expiry date (a no-credentials
-# app, or a Completed item without a date). It shows in a table but never alerts.
+# Row for an object without a usable expiry date
 function New-InventoryRow {
     param($Object)
     [pscustomobject]@{
         id             = "$($Object.id)"
         name           = "$($Object.name)"
+        owner          = "$($Object.owner)"
         servername     = "$($Object.servername)"
         template       = "$($Object.template)"
         environment    = "$($Object.environment)"
@@ -206,7 +219,13 @@ function New-InventoryRow {
         trigger        = $null
         allTriggers    = @()
         maxTrigger     = $null
-        schedule       = @()
+        windows        = @()
+        nextAlertDate  = $null
+        nextAlertLabel = ''
+        nextAlertDue   = $false
+        nextAlertChannel = ''
+        lastAlerted    = $null
+        lastAlertedLabel = ''
         urgency        = 'none'
         status         = $(if ([string]::IsNullOrWhiteSpace($Object.status)) { 'Backlog' } else { "$($Object.status)" })
         copiedDate     = "$($Object.copiedDate)"
@@ -221,15 +240,13 @@ function New-InventoryRow {
         mailBody       = "$($Object.mail.mailBody)"
         mailRecipients = @($Object.mail.mailRecipients)
         teamsOn        = $false
-        teamWebhookUrl = "$($Object.teams.teamWebhookUrl)"
+        teamWebhook    = (Get-MaskedWebhook "$($Object.teams.teamWebhookUrl)")
         teamSubject    = "$($Object.teams.teamSubject)"
         teamBody       = "$($Object.teams.teamBody)"
     }
 }
 
-# Build a display row for a Completed object (read from MonitorObjectComplete.json).
-# Completed objects always get a row - a full one when they have a valid expiry
-# date and triggers, otherwise a minimal inventory row.
+# Row for a Completed object
 function New-CompletedRow {
     param($Object)
 
@@ -248,20 +265,14 @@ function New-CompletedRow {
 
     $urgency = Get-Urgency -DaysLeft $daysLeft -Triggers $triggers
     $hit     = $triggers | Where-Object { $daysLeft -le $_ -and $daysLeft -ge 0 } | Select-Object -First 1
-    $levels  = @('critical', 'warning', 'ok')
-    $schedule = for ($i = 0; $i -lt $triggers.Count; $i++) {
-        $t = $triggers[$i]
-        [pscustomobject]@{
-            trigger = $t
-            level   = if ($i -lt $levels.Count) { $levels[$i] } else { 'ok' }
-            date    = $expireDate.AddDays(-$t).ToString('yyyy-MM-dd')
-            passed  = ($expireDate.AddDays(-$t) -le $today)
-        }
-    }
+    $plan    = Get-AlertPlan -ExpireDate $expireDate -Today $today -Triggers $triggers `
+                   -KeyPrefix "$($Object.id)_$($Object.expireDate)" -State $sentState `
+                   -MailOn (Test-NotifyFlag $Object.notifyMethodbyMail) -TeamsOn (Test-NotifyFlag $Object.notifyMethodbyTeams)
 
     [pscustomobject]@{
         id             = "$($Object.id)"
         name           = "$($Object.name)"
+        owner          = "$($Object.owner)"
         servername     = "$($Object.servername)"
         template       = "$($Object.template)"
         environment    = "$($Object.environment)"
@@ -271,7 +282,13 @@ function New-CompletedRow {
         trigger        = $hit
         allTriggers    = @($triggers)
         maxTrigger     = $triggers[-1]
-        schedule       = @($schedule | Sort-Object trigger -Descending)
+        windows        = @($plan.windows)
+        nextAlertDate  = $plan.nextAlertDate
+        nextAlertLabel = $plan.nextAlertLabel
+        nextAlertDue   = $plan.nextAlertDue
+        nextAlertChannel = $plan.nextAlertChannel
+        lastAlerted    = $plan.lastAlerted
+        lastAlertedLabel = $plan.lastAlertedLabel
         urgency        = $urgency
         status         = $(if ([string]::IsNullOrWhiteSpace($Object.status)) { 'Completed' } else { "$($Object.status)" })
         copiedDate     = "$($Object.copiedDate)"
@@ -286,7 +303,7 @@ function New-CompletedRow {
         mailBody       = "$($Object.mail.mailBody)"
         mailRecipients = @($Object.mail.mailRecipients)
         teamsOn        = (Test-NotifyFlag $Object.notifyMethodbyTeams)
-        teamWebhookUrl = "$($Object.teams.teamWebhookUrl)"
+        teamWebhook    = (Get-MaskedWebhook "$($Object.teams.teamWebhookUrl)")
         teamSubject    = "$($Object.teams.teamSubject)"
         teamBody       = "$($Object.teams.teamBody)"
     }
@@ -298,7 +315,7 @@ foreach ($object in $monitoredObjectsRaw) {
     $label = "Object $($object.id) - $($object.name)"
     $isCompleted = ("$($object.status)" -ieq 'Completed')
 
-    # No-credentials app registrations go to their own tab - UNLESS marked Completed (then -> Completed tab).
+    # No-credentials apps get their own tab, unless Completed
     if (($object.noCredentials -eq $true -or ($object.source -eq 'EntraAppReg' -and [string]::IsNullOrWhiteSpace($object.expireDate))) -and -not $isCompleted) {
         $noCreds.Add([pscustomobject]@{
             id          = "$($object.id)"
@@ -355,27 +372,19 @@ foreach ($object in $monitoredObjectsRaw) {
 
     $urgency = Get-Urgency -DaysLeft $daysLeft -Triggers $triggers
 
-    # The window currently in effect, or $null when the object is outside all of them
-    $hit = $triggers | Where-Object { $daysLeft -le $_ -and $daysLeft -ge 0 } | Select-Object -First 1
+        $hit = $triggers | Where-Object { $daysLeft -le $_ -and $daysLeft -ge 0 } | Select-Object -First 1
     $mailOn  = Test-NotifyFlag $object.notifyMethodbyMail
     $teamsOn = Test-NotifyFlag $object.notifyMethodbyTeams
     if (-not $mailOn  -and "$($object.notifyMethodbyMail)"  -match 'True or null') { $placeholder++ }
     if (-not $teamsOn -and "$($object.notifyMethodbyTeams)" -match 'True or null') { $placeholder++ }
 
-    $levels   = @('critical', 'warning', 'ok')
-    $schedule = for ($i = 0; $i -lt $triggers.Count; $i++) {
-        $t = $triggers[$i]
-        [pscustomobject]@{
-            trigger = $t
-            level   = if ($i -lt $levels.Count) { $levels[$i] } else { 'ok' }
-            date    = $expireDate.AddDays(-$t).ToString('yyyy-MM-dd')
-            passed  = ($expireDate.AddDays(-$t) -le $today)
-        }
-    }
+        $plan = Get-AlertPlan -ExpireDate $expireDate -Today $today -Triggers $triggers `
+                -KeyPrefix "$($object.id)_$($object.expireDate)" -State $sentState -MailOn $mailOn -TeamsOn $teamsOn
 
     $rows.Add([pscustomobject]@{
         id             = "$($object.id)"
         name           = "$($object.name)"
+        owner          = "$($object.owner)"
         servername     = "$($object.servername)"
         template       = "$($object.template)"
         environment    = "$($object.environment)"
@@ -385,7 +394,13 @@ foreach ($object in $monitoredObjectsRaw) {
         trigger        = $hit
         allTriggers    = @($triggers)
         maxTrigger     = $triggers[-1]
-        schedule       = @($schedule | Sort-Object trigger -Descending)
+        windows        = @($plan.windows)
+        nextAlertDate  = $plan.nextAlertDate
+        nextAlertLabel = $plan.nextAlertLabel
+        nextAlertDue   = $plan.nextAlertDue
+        nextAlertChannel = $plan.nextAlertChannel
+        lastAlerted    = $plan.lastAlerted
+        lastAlertedLabel = $plan.lastAlertedLabel
         urgency        = $urgency
         status         = $(if ([string]::IsNullOrWhiteSpace($object.status)) { 'Backlog' } else { "$($object.status)" })
         severity       = "$($object.severity)"
@@ -401,14 +416,14 @@ foreach ($object in $monitoredObjectsRaw) {
         mailRecipients = @($object.mail.mailRecipients)
 
         teamsOn        = $teamsOn
-        teamWebhookUrl = "$($object.teams.teamWebhookUrl)"
+        teamWebhook    = (Get-MaskedWebhook "$($object.teams.teamWebhookUrl)")
         teamSubject    = "$($object.teams.teamSubject)"
         teamBody       = "$($object.teams.teamBody)"
         
     })
 }
 
-# Completed tab: built ONLY from MonitorObjectComplete.json
+# Completed tab
 foreach ($object in $completedObjects) {
     $completedRows.Add((New-CompletedRow $object))
 }
@@ -422,35 +437,80 @@ $rows | Group-Object urgency | Sort-Object Name | ForEach-Object { Write-Host ("
 if ($invalid.Count) { Write-Warning "$($invalid.Count) object(s) were skipped and are NOT being monitored." }
 if ($placeholder) { Write-Warning "$placeholder notify field(s) still hold the placeholder string. Replace them with true / false." }
 
-#------------------------------- Embed as JSON -------------------------------
+#------------------------------- Report settings -------------------------------
 
-$dataJson = $rows | ConvertTo-Json -Depth 6 -Compress
-if ($rows.Count -eq 1) { $dataJson = "[$dataJson]" }
-if (-not $rows.Count) { $dataJson = '[]' }
+# ReportSettings.json, parameters override
+$reportSettings = $null
+if (Test-Path $ReportSettingsPath) {
+    try { $reportSettings = Get-Content -Raw -Encoding UTF8 $ReportSettingsPath | ConvertFrom-Json }
+    catch { Write-Warning "Could not read $ReportSettingsPath - using defaults. $($_.Exception.Message)" }
+}
+function Get-ReportSetting {
+    param([string] $Name, $Default)
+    if ($null -ne $reportSettings -and $reportSettings.PSObject.Properties[$Name] -and
+        -not [string]::IsNullOrWhiteSpace("$($reportSettings.$Name)")) { return $reportSettings.$Name }
+    return $Default
+}
+if ([string]::IsNullOrWhiteSpace($OrganizationName)) { $OrganizationName = "$(Get-ReportSetting 'OrganizationName' '')" }
+if ([string]::IsNullOrWhiteSpace($LogoPath))         { $LogoPath         = "$(Get-ReportSetting 'LogoPath' '')" }
+$staleAfterHours = 24; try { $staleAfterHours = [double](Get-ReportSetting 'StaleAfterHours' 24) } catch { Write-Warning 'StaleAfterHours is not a number - using 24.' }
+$timelineDays    = 90; try { $timelineDays    = [int](Get-ReportSetting 'TimelineDays' 90) }       catch { Write-Warning 'TimelineDays is not a number - using 90.' }
+if ($timelineDays -lt 7) { $timelineDays = 7 }
+$editorUrl = "$(Get-ReportSetting 'EditorUrl' '')"
 
-$completedJson = if ($completedRows.Count) {
-    $j = $completedRows | ConvertTo-Json -Depth 6 -Compress
-    if ($completedRows.Count -eq 1) { "[$j]" } else { $j }
-} else { '[]' }
+# EditorUrl: "" = edit.html if it exists, "off" = none
+if ($editorUrl -ieq 'off') { $editorUrl = '' }
+elseif ([string]::IsNullOrWhiteSpace($editorUrl)) {
+    $editPage = [IO.Path]::Combine((Split-Path $websitePath -Parent), 'edit.html')
+    $editorUrl = if (Test-Path $editPage) { 'edit.html' } else { '' }
+}
 
-$invalidJson = if ($invalid.Count) {
-    $j = $invalid | ConvertTo-Json -Depth 3 -Compress
-    if ($invalid.Count -eq 1) { "[$j]" } else { $j }
-} else { '[]' }
+# Logo as data URI
+$logoDataUri = ''
+if (-not [string]::IsNullOrWhiteSpace($LogoPath)) {
+    $logoFull = if ([IO.Path]::IsPathRooted($LogoPath)) { $LogoPath } else { [IO.Path]::Combine($scriptRoot, $LogoPath) }
+    $logoFull = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($logoFull)
+    $mimeTypes = @{ '.png' = 'image/png'; '.jpg' = 'image/jpeg'; '.jpeg' = 'image/jpeg'; '.gif' = 'image/gif'; '.svg' = 'image/svg+xml'; '.webp' = 'image/webp' }
+    $logoExt = [IO.Path]::GetExtension($logoFull).ToLowerInvariant()
+    if (-not (Test-Path $logoFull))            { Write-Warning "Logo not found: $logoFull - the report is written without it." }
+    elseif (-not $mimeTypes.ContainsKey($logoExt)) { Write-Warning "Logo must be .png, .jpg, .gif, .svg or .webp: $logoFull" }
+    elseif ((Get-Item $logoFull).Length -gt 512KB) { Write-Warning "Logo is larger than 512 KB - use a smaller file: $logoFull" }
+    else {
+        $logoDataUri = "data:$($mimeTypes[$logoExt]);base64," + [Convert]::ToBase64String([IO.File]::ReadAllBytes($logoFull))
+        Write-Host "- Logo embedded from $logoFull" -ForegroundColor DarkGray
+    }
+}
 
-$noCredsJson = if ($noCreds.Count) {
-    $j = $noCreds | ConvertTo-Json -Depth 3 -Compress
-    if ($noCreds.Count -eq 1) { "[$j]" } else { $j }
-} else { '[]' }
+$reportVersion = ''
+if (Test-Path $ScriptSettingsPath) {
+    try { $reportVersion = "$((Get-Content -Raw -Encoding UTF8 $ScriptSettingsPath | ConvertFrom-Json).version)" } catch { $reportVersion = '' }
+}
 
-$generated = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-$sourceEsc = [System.Net.WebUtility]::HtmlEncode($JsonPath)
-# Show the completed-file path relative to the script root (e.g. Files\config\MonitorObjectComplete.json)
 $completeDisplay = $CompleteJsonPath
 if ($scriptRoot -and $completeDisplay.StartsWith($scriptRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
     $completeDisplay = $completeDisplay.Substring($scriptRoot.Length).TrimStart('\', '/')
 }
-$completeSourceEsc = [System.Net.WebUtility]::HtmlEncode($completeDisplay)
+
+#------------------------------- Embed as JSON -------------------------------
+
+$dataJson      = ConvertTo-EmbedJson $rows
+$completedJson = ConvertTo-EmbedJson $completedRows
+$invalidJson   = ConvertTo-EmbedJson $invalid -Depth 3
+$noCredsJson   = ConvertTo-EmbedJson $noCreds -Depth 3
+
+# Page settings
+$meta = [ordered]@{
+    organization    = $OrganizationName
+    logo            = $logoDataUri
+    generated       = (Get-Date).ToString('yyyy-MM-ddTHH:mm:sszzz', [cultureinfo]::InvariantCulture)
+    staleAfterHours = $staleAfterHours
+    timelineDays    = $timelineDays
+    completeSource  = $completeDisplay
+    editorUrl       = $editorUrl
+    version         = $reportVersion
+    expiredNotifyDays = 7
+}
+$metaJson = ConvertTo-EmbedJson ([pscustomobject]$meta) -Single
 
 Write-Host $Section... "100%" -ForegroundColor Green
 Write-Host ""
@@ -475,511 +535,14 @@ Try
  Write-Host $Section... "0%" -ForegroundColor Yellow
 
  # Run Query
-$html = @"
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title> PsToDo - Calender Reminder - status</title>
-<style>
-  :root {
-    --bg: #14171a; --panel: #1b1f23; --panel-2: #21262b;
-    --line: #2d343a; --line-2: #3a434a;
-    --fg: #e6e9ea; --muted: #8c979e; --dim: #667079;
-    --green: #4ec98f; --green-bg: #16281f; --green-line: #24523c;
-    --expired: #ff6b6b; --critical: #ff8a5b; --warning: #f0b429; --ok: #4ec98f;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; padding: 2rem; background: var(--bg); color: var(--fg);
-         font: 14px/1.6 "Segoe UI", system-ui, sans-serif; }
-  h1 { font-size: 22px; font-weight: 500; margin: 0 0 4px; display: flex; align-items: center; gap: 10px; }
-  h1::before { content: ''; width: 8px; height: 22px; background: var(--green); border-radius: 2px; }
-  .meta { color: var(--dim); font-size: 13px; margin-bottom: 24px; }
+if (-not (Test-Path $TemplatePath)) { throw "Report template not found: $TemplatePath" }
+$template = Get-Content -Raw -Encoding UTF8 $TemplatePath
 
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-           gap: 12px; margin-bottom: 24px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-          padding: 14px 16px; cursor: pointer; transition: border-color .12s, background .12s; }
-  .card:hover { border-color: var(--line-2); }
-  .card.active { border-color: var(--green); background: var(--green-bg); }
-  .card .n { font-size: 26px; font-weight: 500; line-height: 1.2; }
-  .card .l { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  .card .h { font-size: 11px; color: var(--dim); margin-top: 2px; }
-  .card.expired .n { color: var(--expired); }
-  .card.critical .n { color: var(--critical); }
-  .card.warning .n { color: var(--warning); }
-  .card.ok .n { color: var(--ok); }
-
-  .controls { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
-  input[type=search] { width: 260px; max-width: 100%; padding: 8px 12px; color: var(--fg);
-    border: 1px solid var(--line); border-radius: 6px; font-size: 14px; background: var(--panel); }
-  input[type=search]::placeholder { color: var(--dim); }
-  input[type=search]:focus { outline: none; border-color: var(--green); }
-
-  button { padding: 8px 16px; border-radius: 6px; font-size: 14px; cursor: pointer;
-           border: 1px solid var(--line); background: var(--panel); color: var(--fg);
-           transition: border-color .12s, background .12s; }
-  button:hover { border-color: var(--line-2); background: var(--panel-2); }
-  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
-  button.primary:hover { background: #1a5fd0; border-color: #1a5fd0; }
-  .count { margin-left: auto; font-size: 13px; color: var(--dim); }
-
-  table { width: 100%; border-collapse: collapse; background: var(--panel);
-          border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-  th { text-align: left; font-weight: 500; font-size: 12px; color: var(--muted);
-       text-transform: uppercase; letter-spacing: .04em; padding: 10px 12px;
-       border-bottom: 1px solid var(--line); cursor: pointer; user-select: none;
-       white-space: nowrap; background: var(--panel-2); }
-  th:hover { color: var(--green); }
-  th .arrow { color: var(--green); font-size: 10px; margin-left: 4px; }
-  td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  tbody tr.row:hover td { background: var(--panel-2); }
-  tbody tr.row { cursor: pointer; }
-  .id { color: var(--dim); }
-  .name { font-weight: 500; }
-  .date, .days, .trigger { white-space: nowrap; }
-  .dim { color: var(--dim); }
-  .chev { display: inline-block; width: 12px; color: var(--dim); transition: transform .12s; }
-  tr.open .chev { transform: rotate(90deg); color: var(--green); }
-
-  .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
-  .b-expired { background: #3a1c1c; color: #ff8f8f; }
-  .b-critical { background: #3a2418; color: #ffa87f; }
-  .b-warning { background: #382c12; color: #f5c85a; }
-  .b-ok { background: var(--green-bg); color: var(--green); }
-  .b-none { background: #2a2f36; color: #aeb8c4; }
-  .b-backlog { background: #2a2f36; color: #aeb8c4; }
-  .b-active { background: #16324f; color: #6fb5ff; }
-  .b-completed { background: var(--green-bg); color: var(--green); }
-  .b-sev-normal { background: #2a2f36; color: #aeb8c4; }
-  .b-sev-high { background: #382c12; color: #f5c85a; }
-  .b-sev-critical { background: #3a1c1c; color: #ff8f8f; }
-  .link a { color: #6fb5ff; text-decoration: none; }
-  .link a:hover { text-decoration: underline; }
-
-  .pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px;
-          border: 1px solid var(--line-2); color: var(--dim); margin-right: 4px; white-space: nowrap; }
-  .pill.on { border-color: var(--green-line); background: var(--green-bg); color: var(--green); }
-
-  tr.detail td { background: #101316; border-bottom: 1px solid var(--line); padding: 0; }
-  .panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-           gap: 20px; padding: 18px 22px 20px 34px; }
-  .block h4 { margin: 0 0 8px; font-size: 12px; font-weight: 500; color: var(--muted);
-              text-transform: uppercase; letter-spacing: .04em; }
-  .block.off h4 { color: var(--dim); }
-  .kv { display: grid; grid-template-columns: 96px 1fr; gap: 3px 12px; font-size: 13px; }
-  .kv dt { color: var(--dim); }
-  .kv dd { margin: 0; word-break: break-word; }
-  .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
-  .off .kv dd { color: var(--dim); }
-
-  .sched { list-style: none; margin: 0; padding: 0; font-size: 13px; }
-  .sched li { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0;
-              border-bottom: 1px solid var(--line); }
-  .sched li:last-child { border-bottom: none; }
-  .sched .lvl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-left: 8px; }
-  .sched .passed { color: var(--dim); }
-  .sched .passed .d { text-decoration: line-through; }
-  .lvl-critical { color: var(--critical); }
-  .lvl-warning { color: var(--warning); }
-  .lvl-ok { color: var(--ok); }
-
-  .msg { padding: 16px; background: var(--panel); border: 1px solid var(--line);
-         border-radius: 8px; color: var(--muted); }
-  .warn { border-color: #5a4a1a; background: #241f10; color: #f5c85a; margin-bottom: 16px; }
-  .bad { border-color: #5a2020; background: #241010; color: #ff8f8f; margin-bottom: 16px; }
-  .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
-  .tabs .tab { padding: 9px 18px; font-size: 14px; cursor: pointer; color: var(--dim);
-        border: none; background: none; border-bottom: 2px solid transparent; border-radius: 0; }
-  .tabs .tab:hover { color: var(--fg); background: none; }
-  .tabs .tab.active { color: var(--green); border-bottom-color: var(--green); }
-  .tabs .tab .c { color: var(--dim); font-size: 12px; margin-left: 4px; }
-  .tabs .tab.active .c { color: var(--green); }
-  footer { margin-top: 20px; color: var(--dim); font-size: 12px; }
-  @media (max-width: 1000px) { body { padding: 1rem; } }
-</style>
-</head>
-<body>
-
-<h1>PsToDo - Calender Reminder </h1>
-<div class="meta">Generated $generated &middot; source: $sourceEsc &middot; $($rows.Count) monitored objects</div>
-
-<div class="tabs" id="tabs"></div>
-
-<div class="cards" id="cards"></div>
-
-<div class="controls" id="controls">
-  <input type="search" id="filter" placeholder="Filter by name, target, recipient...">
-  <button class="primary" id="reload">Reload</button>
-  <button id="reset">Reset filters</button>
-  <span class="count" id="count"></span>
-</div>
-
-<div id="mount"></div>
-
-<footer>Status follows each object's own triggers: the smallest trigger is critical, the middle one is warning, anything beyond is ok. Click a row for its mail and Teams configuration.</footer>
-
-<script id="data" type="application/json">$dataJson</script>
-<script id="completed" type="application/json">$completedJson</script>
-<script id="invalid" type="application/json">$invalidJson</script>
-<script id="noncred" type="application/json">$noCredsJson</script>
-
-<script>
-const DATA      = JSON.parse(document.getElementById('data').textContent);
-const COMPLETED = JSON.parse(document.getElementById('completed').textContent);
-const COMPLETED_SOURCE = "$completeSourceEsc";
-const INVALID   = JSON.parse(document.getElementById('invalid').textContent);
-const NONCRED   = JSON.parse(document.getElementById('noncred').textContent);
-
-const URGENCY = [
-  { key: 'expired',  label: 'Expired',  hint: 'Past the expiry date' },
-  { key: 'critical', label: 'Critical', hint: 'Inside Datetrigger 1' },
-  { key: 'warning',  label: 'Warning',  hint: 'Inside Datetrigger 2' },
-  { key: 'ok',       label: 'Ok',       hint: 'Inside Datetrigger 3 or beyond' }
-];
-
-const DEFAULTS = { filter: '', urgency: null, sortKey: 'daysLeft', sortDir: 1, tab: 'monitored' };
-let state = { ...DEFAULTS };
-let openRows = new Set();
-
-const esc = s => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
-
-// Completed objects live in their own tab and are loaded from a separate file
-// (MonitorObjectComplete.json -> COMPLETED). DATA holds only non-completed objects.
-const isCompleted = r => (r.status || '').toLowerCase() === 'completed';
-function tabBase() {
-  if (state.tab === 'completed') return COMPLETED;
-  return DATA.filter(r => !isCompleted(r));
-}
-
-// Monitored objects that have neither mail nor Teams enabled — they will never
-// alert. Completed objects are excluded (they are done, not waiting to alert).
-function noChannelRows() {
-  return DATA.filter(r => !r.mailOn && !r.teamsOn && !isCompleted(r));
-}
-
-function daysText(n) {
-  if (n === null || n === undefined) return '—';
-  if (n < 0)   return Math.abs(n) + (Math.abs(n) === 1 ? ' day ago' : ' days ago');
-  if (n === 0) return 'expires today';
-  if (n === 1) return '1 day left';
-  return n + ' days left';
-}
-
-function renderCards() {
-  const base = tabBase();
-  document.getElementById('cards').innerHTML = URGENCY.map(u => {
-    const n = base.filter(r => r.urgency === u.key).length;
-    const on = state.urgency === u.key ? ' active' : '';
-    return '<div class="card ' + u.key + on + '" data-u="' + u.key + '">' +
-           '<div class="n">' + n + '</div>' +
-           '<div class="l">' + u.label + '</div>' +
-           '<div class="h">' + u.hint + '</div></div>';
-  }).join('');
-}
-
-function searchBlob(r) {
-  return [r.id, r.name, r.servername, r.template, r.environment, r.action, r.status, r.severity,
-          r.mailSender, r.mailSubject, (r.mailRecipients || []).join(' '),
-          r.teamSubject, r.teamChannelId].join(' ').toLowerCase();
-}
-
-function visibleRows() {
-  const q = state.filter.toLowerCase();
-  let view = tabBase();
-  if (state.urgency) view = view.filter(r => r.urgency === state.urgency);
-  if (q) view = view.filter(r => searchBlob(r).includes(q));
-
-  return view.sort((a, b) => {
-    const x = a[state.sortKey], y = b[state.sortKey];
-    if (typeof x === 'number' && typeof y === 'number') return state.sortDir * (x - y);
-    return state.sortDir * String(x ?? '').localeCompare(String(y ?? ''));
-  });
-}
-
-const COLS = [
-  ['', ''], ['id','Id'], ['name','Name'], ['servername','Target'],
-  ['environment','Environment'], ['expireDate','Expires'], ['daysLeft','Days left'],
-  ['trigger','Window'], ['urgency','Urgency'], ['status','Status'], ['notify','Notify']
-];
-
-function scheduleHtml(r) {
-  const items = (r.schedule || []).map(s =>
-    '<li class="' + (s.passed ? 'passed' : '') + '">' +
-      '<span>' + s.trigger + '-day' +
-        '<span class="lvl lvl-' + s.level + '">' + s.level + '</span></span>' +
-      '<span class="d">' + esc(s.date) + '</span>' +
-    '</li>').join('');
-  return '<ul class="sched">' + items + '</ul>';
-}
-
-function detailHtml(r) {
-  const recipients = (r.mailRecipients || []).length
-    ? (r.mailRecipients || []).map(esc).join('<br>')
-    : '<span class="dim">none</span>';
-
-  return '<tr class="detail"><td colspan="' + COLS.length + '"><div class="panel">' +
-
-    '<div class="block' + (r.mailOn ? '' : ' off') + '"><h4>Mail ' +
-      (r.mailOn ? '<span class="pill on">on</span>' : '<span class="pill">off</span>') + '</h4>' +
-      '<dl class="kv">' +
-        '<dt>Sender</dt><dd>' + esc(r.mailSender) + '</dd>' +
-        '<dt>Recipients</dt><dd>' + recipients + '</dd>' +
-        '<dt>Subject</dt><dd>' + esc(r.mailSubject) + '</dd>' +
-        '<dt>Body</dt><dd>' + esc(r.mailBody) + '</dd>' +
-      '</dl></div>' +
-
-    '<div class="block' + (r.teamsOn ? '' : ' off') + '"><h4>Teams ' +
-      (r.teamsOn ? '<span class="pill on">on</span>' : '<span class="pill">off</span>') + '</h4>' +
-      '<dl class="kv">' +
-       '<dt>Team Webhook</dt><dd class="mono">' + esc(r.teamWebhookUrl) + '</dd>' +
-        '<dt>Subject</dt><dd>' + esc(r.teamSubject) + '</dd>' +
-        '<dt>Body</dt><dd>' + esc(r.teamBody) + '</dd>' +
-      '</dl></div>' +
-
-    '<div class="block"><h4>Alert schedule</h4>' + scheduleHtml(r) + '</div>' +
-
-    '<div class="block"><h4>Action required</h4>' +
-      '<div>' + esc(r.action) + '</div>' +
-      '<dl class="kv" style="margin-top:10px">' +
-        '<dt>Status</dt><dd><span class="badge b-' + (r.status || '').toLowerCase() + '">' + esc(r.status) + '</span>' +
-          (r.copiedDate ? '<span class="dim" style="margin-left:8px">' + esc(r.copiedDate) + '</span>' : '') + '</dd>' +
-        (r.appId ? '<dt>App ID</dt><dd class="mono">' + esc(r.appId) + '</dd>' : '') +
-        (r.messageId ? '<dt>Message ID</dt><dd class="mono">' + esc(r.messageId) + '</dd>' : '') +
-        (r.severity ? '<dt>Severity</dt><dd><span class="badge b-sev-' + r.severity.toLowerCase() + '">' + esc(r.severity) + '</span></dd>' : '') +
-        (r.messageLink ? '<dt>Link</dt><dd class="link"><a href="' + esc(r.messageLink) + '" target="_blank" rel="noopener">Open in admin center</a></dd>' : '') +
-        '<dt>Template</dt><dd>' + esc(r.template) + '</dd>' +
-        '<dt>Triggers</dt><dd>' + (r.allTriggers || []).join(', ') + '</dd>' +
-      '</dl></div>' +
-
-  '</div></td></tr>';
-}
-
-function notifyCell(r) {
-  return '<span class="pill' + (r.mailOn  ? ' on' : '') + '">Mail</span>' +
-         '<span class="pill' + (r.teamsOn ? ' on' : '') + '">Teams</span>';
-}
-
-function windowCell(r) {
-  if (r.trigger !== null && r.trigger !== undefined) return r.trigger + '-day';
-  if (r.maxTrigger === null || r.maxTrigger === undefined) return '<span class="dim">—</span>';
-  return '<span class="dim">&gt; ' + r.maxTrigger + '-day</span>';
-}
-
-function renderTabs() {
-  const tabs = [
-    { key: 'monitored',    label: 'Monitored',      n: DATA.filter(r => !isCompleted(r)).length },
-    { key: 'completed',    label: 'Completed',      n: COMPLETED.length },
-    { key: 'nochannel',    label: 'No channel',     n: noChannelRows().length },
-    { key: 'noncred',      label: 'No credentials', n: NONCRED.length },
-    { key: 'notmonitored', label: 'Not monitored',  n: INVALID.length }
-  ];
-  document.getElementById('tabs').innerHTML = tabs.map(t =>
-    '<button class="tab' + (state.tab === t.key ? ' active' : '') + '" data-tab="' + t.key + '">' +
-      t.label + '<span class="c">' + t.n + '</span></button>'
-  ).join('');
-}
-
-function noCredsDetailHtml(o) {
-  return '<tr class="detail"><td colspan="6"><div class="panel">' +
-    '<div class="block"><h4>App registration</h4><dl class="kv">' +
-      '<dt>App ID</dt><dd class="mono">' + esc(o.servername) + '</dd>' +
-      '<dt>Environment</dt><dd>' + esc(o.environment) + '</dd>' +
-      '<dt>Status</dt><dd><span class="badge b-' + (o.status || '').toLowerCase() + '">' + esc(o.status) + '</span></dd>' +
-      '<dt>Template</dt><dd>' + esc(o.template) + '</dd>' +
-    '</dl></div>' +
-    '<div class="block"><h4>Details</h4><dl class="kv">' +
-      '<dt>Source</dt><dd>' + esc(o.source) + '</dd>' +
-      '<dt>Key</dt><dd class="mono">' + esc(o.entraKeyId) + '</dd>' +
-    '</dl><div style="margin-top:10px;font-size:13px">' + esc(o.description) + '</div></div>' +
-    '<div class="block"><h4>Verify usage (sign-in logs)</h4>' +
-      '<div style="font-size:13px">Entra &rarr; <b>Enterprise applications</b> &rarr; search <span class="mono">' + esc(o.servername) + '</span> &rarr; open the service principal &rarr; <b>Sign-in logs</b>. No recent sign-ins = likely unused.</div>' +
-    '</div>' +
-  '</div></td></tr>';
-}
-
-function noCredsHtml() {
-  if (!NONCRED.length) {
-    return '<div class="msg">No app registrations without credentials.</div>';
-  }
-  const body = NONCRED.map(o => {
-    const isOpen = openRows.has(o.id);
-    const main =
-      '<tr class="row' + (isOpen ? ' open' : '') + '" data-id="' + esc(o.id) + '">' +
-        '<td><span class="chev">&#9654;</span></td>' +
-        '<td class="id">' + esc(o.id) + '</td>' +
-        '<td class="name">' + esc(o.name) + '</td>' +
-        '<td class="mono">' + esc(o.servername) + '</td>' +
-        '<td>' + esc(o.environment) + '</td>' +
-        '<td><span class="badge b-' + (o.status || '').toLowerCase() + '">' + esc(o.status) + '</span></td>' +
-      '</tr>';
-    return main + (isOpen ? noCredsDetailHtml(o) : '');
-  }).join('');
-  return '<div class="msg" style="margin-bottom:16px">' +
-      'App registrations with <b>no secret and no certificate</b>. Nothing expires, so they never alert — listed here for inventory. Click a row for details.' +
-      '<div style="margin-top:10px">' +
-        '<b>Verify whether one is still in use (sign-in logs):</b><br>' +
-        'Copy its <b>App ID</b> &rarr; in Entra go to <b>Enterprise applications</b> &rarr; search for that App ID &rarr; open the service principal &rarr; open <b>Sign-in logs</b>. ' +
-        'If there are no recent sign-ins, the app registration is likely unused and can be cleaned up.' +
-      '</div>' +
-    '</div>' +
-    '<table><thead><tr><th style="width:28px"></th><th>Id</th><th>Name</th><th>App ID</th><th>Environment</th><th>Status</th></tr></thead><tbody>' + body + '</tbody></table>';
-}
-
-function notMonitoredHtml() {
-  if (!INVALID.length) {
-    return '<div class="msg">Every object has a valid expiry date — nothing is unmonitored.</div>';
-  }
-  const rows = INVALID.map(o =>
-    '<tr class="row"><td class="id">' + esc(o.id) + '</td>' +
-    '<td class="name">' + esc(o.name) + '</td>' +
-    '<td>' + esc(o.reason) + '</td></tr>').join('');
-  return '<div class="msg bad" style="margin-bottom:16px">These objects have no valid <b>expireDate</b>, so they are not monitored. Fix the date in <b>monitorobjects.json</b> to start monitoring them.</div>' +
-    '<table><thead><tr><th>Id</th><th>Name</th><th>Reason</th></tr></thead><tbody>' + rows + '</tbody></table>';
-}
-
-function noChannelHtml() {
-  const list = noChannelRows();
-  if (!list.length) {
-    return '<div class="msg">Every monitored object has at least one notification channel enabled.</div>';
-  }
-  const rows = list.map(o =>
-    '<tr class="row"><td class="id">' + esc(o.id) + '</td>' +
-    '<td class="name">' + esc(o.name) + '</td>' +
-    '<td>' + esc(o.servername) + '</td>' +
-    '<td>' + esc(o.environment) + '</td>' +
-    '<td class="date">' + esc(o.expireDate) + '</td>' +
-    '<td><span class="badge b-' + (o.status || '').toLowerCase() + '">' + esc(o.status) + '</span></td></tr>').join('');
-  return '<div class="msg warn" style="margin-bottom:16px">' +
-      'These object(s) have <b>no notification channel enabled</b> — neither mail nor Teams — so they will never alert even when they expire. ' +
-      'Set <b>notifyMethodbyMail</b> and/or <b>notifyMethodbyTeams</b> to a real boolean (<span class="mono">true</span>) in <b>monitorobjects.json</b>.' +
-    '</div>' +
-    '<table><thead><tr><th>Id</th><th>Name</th><th>Target</th><th>Environment</th><th>Expires</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table>';
-}
-
-function render() {
-  renderTabs();
-
-  const onTable = (state.tab === 'monitored' || state.tab === 'completed');
-  document.getElementById('cards').style.display    = onTable ? '' : 'none';
-  document.getElementById('controls').style.display = onTable ? '' : 'none';
-
-  if (state.tab === 'nochannel') {
-    document.getElementById('mount').innerHTML = noChannelHtml();
-    return;
-  }
-  if (state.tab === 'noncred') {
-    document.getElementById('mount').innerHTML = noCredsHtml();
-    return;
-  }
-  if (state.tab === 'notmonitored') {
-    document.getElementById('mount').innerHTML = notMonitoredHtml();
-    return;
-  }
-
-  renderCards();
-
-  // The Completed tab is loaded from a separate data file - say so at the top.
-  const completedNote = (state.tab === 'completed')
-    ? '<div class="msg" style="margin-bottom:16px">The data in this tab comes from <b>' + esc(COMPLETED_SOURCE) + '</b>. ' +
-      'Objects with status <b>Completed</b> are copied there from monitorobjects.json each time the report runs.</div>'
-    : '';
-
-  const view = visibleRows();
-  const baseTotal = tabBase().length;
-  document.getElementById('count').textContent =
-    view.length === baseTotal ? baseTotal + ' objects'
-                              : view.length + ' of ' + baseTotal + ' objects';
-
-  if (!view.length) {
-    const empty = (state.tab === 'completed')
-      ? '<div class="msg">No completed objects yet.</div>'
-      : '<div class="msg">No objects match the current filter.</div>';
-    document.getElementById('mount').innerHTML = completedNote + empty;
-    return;
-  }
-
-  const head = COLS.map(c => {
-    if (!c[0]) return '<th style="width:28px"></th>';
-    const arrow = state.sortKey === c[0]
-      ? '<span class="arrow">' + (state.sortDir === 1 ? '&#9650;' : '&#9660;') + '</span>' : '';
-    return '<th data-k="' + c[0] + '">' + c[1] + arrow + '</th>';
-  }).join('');
-
-  const body = view.map(r => {
-    const isOpen = openRows.has(r.id);
-    const main =
-      '<tr class="row' + (isOpen ? ' open' : '') + '" data-id="' + esc(r.id) + '">' +
-        '<td><span class="chev">&#9654;</span></td>' +
-        '<td class="id">' + esc(r.id) + '</td>' +
-        '<td class="name">' + esc(r.name) + '</td>' +
-        '<td>' + esc(r.servername) + '</td>' +
-        '<td>' + esc(r.environment) + '</td>' +
-        '<td class="date">' + esc(r.expireDate) + '</td>' +
-        '<td class="days">' + daysText(r.daysLeft) + '</td>' +
-        '<td class="trigger">' + windowCell(r) + '</td>' +
-        '<td><span class="badge b-' + r.urgency + '">' + r.urgency + '</span></td>' +
-        '<td><span class="badge b-' + (r.status || '').toLowerCase() + '">' + esc(r.status) + '</span></td>' +
-        '<td>' + notifyCell(r) + '</td>' +
-      '</tr>';
-    return main + (isOpen ? detailHtml(r) : '');
-  }).join('');
-
-  document.getElementById('mount').innerHTML =
-    completedNote + '<table><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table>';
-}
-
-document.getElementById('filter').addEventListener('input', e => {
-  state.filter = e.target.value;
-  render();
-});
-
-document.getElementById('reload').addEventListener('click', () => location.reload());
-
-document.getElementById('reset').addEventListener('click', () => {
-  state = { ...DEFAULTS, tab: state.tab };
-  openRows.clear();
-  document.getElementById('filter').value = '';
-  render();
-});
-
-document.getElementById('tabs').addEventListener('click', e => {
-  const t = e.target.closest('.tab');
-  if (!t) return;
-  state.tab = t.dataset.tab;
-  render();
-});
-
-document.getElementById('cards').addEventListener('click', e => {
-  const card = e.target.closest('.card');
-  if (!card) return;
-  state.urgency = (state.urgency === card.dataset.u) ? null : card.dataset.u;
-  render();
-});
-
-document.getElementById('mount').addEventListener('click', e => {
-  const th = e.target.closest('th');
-  if (th && th.dataset.k) {
-    state.sortDir = (th.dataset.k === state.sortKey) ? -state.sortDir : 1;
-    state.sortKey = th.dataset.k;
-    render();
-    return;
-  }
-  const tr = e.target.closest('tr.row');
-  if (tr) {
-    const id = tr.dataset.id;
-    openRows.has(id) ? openRows.delete(id) : openRows.add(id);
-    render();
-  }
-});
-
-render();
-</script>
-
-</body>
-</html>
-"@
+$html = $template.Replace('__PSTODO_META__', $metaJson)
+$html = $html.Replace('__PSTODO_DATA__', $dataJson)
+$html = $html.Replace('__PSTODO_COMPLETED__', $completedJson)
+$html = $html.Replace('__PSTODO_INVALID__', $invalidJson)
+$html = $html.Replace('__PSTODO_NONCRED__', $noCredsJson)
 
 Write-Host $Section... "100%" -ForegroundColor Green
 Write-Host ""
@@ -1010,7 +573,6 @@ if ($outDir -and -not (Test-Path $outDir)) {New-Item -Path $outDir -ItemType Dir
 $html | Set-Content -Path $websitePath -Encoding UTF8 -Verbose
 Write-Host "Report written to $websitePath" -ForegroundColor Green
 
-# Ensure the backup folder exists before copying the report into it.
 $backupDir = Split-Path $backupWebsitePath -Parent
 if ($backupDir -and -not (Test-Path $backupDir)) { New-Item -Path $backupDir -ItemType Directory -Force | Out-Null }
 

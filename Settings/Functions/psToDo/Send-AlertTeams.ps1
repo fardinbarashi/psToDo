@@ -1,11 +1,5 @@
 ﻿function Send-AlertTeams {
-    <#
-        Posts to a Teams Workflows (Power Automate) webhook.
-        No app registration, no token, no Graph permission needed.
-
-        The webhook URL IS the credential. Anyone holding it can post to the
-        channel. Keep monitorobjects.json out of any web root and out of git.
-    #>
+    # Teams Workflows webhook. The URL is the credential.
     [CmdletBinding(SupportsShouldProcess)]
     param([Parameter(Mandatory)] $Alert)
 
@@ -40,7 +34,7 @@
     }
 
     try {
-        # Depth 20: the default of 2 turns nested hashtables into type names
+        # Depth 20 for the nested card
         Invoke-RestMethod -Method POST -Uri $Alert.teamWebhookUrl `
             -Body ($payload | ConvertTo-Json -Depth 20) `
             -ContentType 'application/json' | Out-Null

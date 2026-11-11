@@ -37,8 +37,7 @@
         saveToSentItems = [bool]$SaveToSentItems
     }
 
-    # The sender must be a real mailbox the app is allowed to send from.
-    # An alias or a distribution group returns ErrorInvalidUser.
+    # Sender must be a real mailbox (alias or group = ErrorInvalidUser)
     $uri    = "https://graph.microsoft.com/v1.0/users/$($Alert.mailSender)/sendMail"
     $target = "$($recipients -join ', ') for object $($Alert.id) - $($Alert.name)"
 
@@ -53,7 +52,7 @@
         return $true
     }
     catch {
-        # Graph puts the useful part in the response body, not the exception message
+        # Error details are in the response body
         $detail = $_.ErrorDetails.Message
         if ($detail) { try { $detail = ($detail | ConvertFrom-Json).error.message } catch { } }
         $reason = if ($detail) { $detail } else { $_.Exception.Message }

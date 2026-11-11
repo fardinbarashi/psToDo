@@ -3,34 +3,24 @@ System requirements
     Windows PowerShell 5.1 or PowerShell 7 (run as Administrator) on the IIS server.
     Run Setup-IisReportSecurity.ps1 FIRST: this script builds on its site and web.config.
 
-psToDo setup helper : Setup-IisReportEditor
+psToDo setup : Setup-IisReportEditor
     Author  : Fardin Barashi
-    Purpose : Turn on saving for the editable dashboard (edit.html), so members of ONE AD
-              group can change monitorobjects.json from the browser. Everyone else who can
-              open the site keeps a read-only view.
+    Purpose : Members of one AD group can save from edit.html. Everyone else who can
+              open the site gets a read-only page.
 
 What it does
-    1. Installs ASP.NET 4.x for IIS (Web-Asp-Net45) if missing - the save handler
-       psToDo-api.ashx is a small ASP.NET handler.
-    2. Makes sure the site's app pool runs .NET CLR v4.0.
-    3. Looks the editors group up in AD (name -> SID -> DOMAIN\name).
-    4. web.config (a backup is taken first):
-         - allows the editors group into the site (URL Authorization), next to the viewers
-         - allows the .ashx extension through request filtering
-         - appSettings: psToDo:EditorsGroup, psToDo:DbPath, psToDo:BackupFolder, psToDo:EditLog
-    5. NTFS:
-         - the app pool identity gets Modify on the db folder, the backup folder and the
-           log folder (the handler runs as the app pool, not as the signed-in user)
-         - the editors group gets Read on the report folder (IIS reads the page as the user)
-    6. Copies psToDo-api.ashx into the report folder if it is not there yet.
+    1. Installs ASP.NET 4.x for IIS if missing.
+    2. Sets the app pool to .NET CLR v4.0.
+    3. Looks the editors group up in AD.
+    4. web.config: allows the editors group, allows .ashx, writes psToDo:EditorsGroup,
+       psToDo:DbPath, psToDo:BackupFolder and psToDo:EditLog (backup first).
+    5. NTFS: app pool Modify on the db, backup and log folders; editors Read on the
+       report folder.
+    6. Copies psToDo-api.ashx into the report folder if missing.
+    Safe to re-run.
 
-    Every step is idempotent - safe to re-run.
-
-Security note
-    Editors can change who gets alert mail and what it says, and which Teams channel
-    webhook an alert is posted to. The mail is then sent by the psToDo app registration
-    (Microsoft Graph). Keep the editors group small. Every save is logged with the user
-    name in Logs\psToDo-web-edits.log and backed up in Files\backup\psToDo.
+    Keep the editors group small: editors decide who gets alert mail and which Teams
+    channel is used. Saves are logged in Logs\psToDo-web-edits.log.
 
 Parameters
     -SiteName      IIS site name. Default: 'psToDo'
@@ -175,7 +165,7 @@ if ($fe -and -not $fe.SelectSingleNode("add[@fileExtension='.ashx']")) {
     [void]$fe.AppendChild($ext)
 }
 
-# c) appSettings read by psToDo-api.ashx. Absolute paths: the handler runs from the site folder.
+# c) appSettings for psToDo-api.ashx (absolute paths)
 $appSettings = Get-OrAddNode $config 'appSettings'
 $settings = [ordered]@{
     'psToDo:EditorsGroup' = $EditorsGroup
@@ -242,7 +232,7 @@ elseif ($PSCmdlet.ShouldProcess($apiTarget, 'Copy psToDo-api.ashx')) {
 
 Write-Host ''
 Write-Host 'Done. Next:' -ForegroundColor Cyan
-Write-Host '  1. Run .\psToDo-HTML-Report-Editable-v1.4.ps1 (writes edit.html), or add it to the report task.'
+Write-Host '  1. Run .\psToDo-HTML-Report-Editable-v1.3.ps1 (writes edit.html), or add it to the report task.'
 Write-Host "  2. Open http(s)://<server>/edit.html as a member of $EditorsGroup : the page says 'Editing'."
 Write-Host '     Anyone else who can open the site sees the same page read-only.'
 Write-Host '  3. A user just added to the group must sign out and in again before saving works.'

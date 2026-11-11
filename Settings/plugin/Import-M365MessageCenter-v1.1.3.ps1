@@ -57,13 +57,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Windows PowerShell 5.1: without this, arrays can be written as {"value":[...],"Count":n}.
 Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue -WhatIf:$false
 
 #------------------------------- Paths -------------------------------
 
-# $PSScriptRoot is empty when the code is run with F8 / "Run Selection" in an editor.
-# Fall back to the script path, then to the current folder.
 $scriptRoot = if ($PSScriptRoot) { $PSScriptRoot }
               elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
               else { (Get-Location).Path }
@@ -82,7 +79,6 @@ $expireDateFormat = 'yyyy-MM-dd'
 
 #------------------------------- Function -----------------------------
 
-# Replace {{token}} placeholders in any string using a lookup table.
 function Expand-Tokens {
     param(
         [string] $Text,
@@ -151,8 +147,7 @@ function New-MonitorObjectFromMessage {
     }
 }
 
-# Flatten service announcement messages into the flat list we monitor.
-# Only messages that carry an actionRequiredByDateTime (a real deadline) are kept.
+# Only messages with actionRequiredByDateTime
 function Get-MessageListFromServiceAnnouncement {
     param([Parameter(Mandatory)] $Messages)
 
@@ -176,7 +171,7 @@ function Get-MessageListFromServiceAnnouncement {
     return $list
 }
 
-# Built-in sample advisories so the merge/backup logic can be tested with no tenant.
+# Sample data for -UseMockData
 function Get-MockMessages {
     [pscustomobject]@{
         Id = 'MC100001'; Title = 'Retirement: Legacy connector is being removed'

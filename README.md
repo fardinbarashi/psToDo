@@ -14,6 +14,7 @@ Built and tested on **PowerShell 7.3.1 (Core)**. The scripts avoid PowerShell 7-
 - [Requirements](#requirements)
 - [HTML dashboard](#html-dashboard)
 - [Editing in the browser (edit.html)](#editing-in-the-browser-edithtml)
+- [Publish with Entra application proxy and MFA](#publish-with-entra-application-proxy-and-mfa)
 - [App registration & Graph permissions](#app-registration--graph-permissions)
 - [How alerting works](#how-alerting-works)
 - [Adding an object to monitor](#adding-an-object-to-monitor)
@@ -26,6 +27,22 @@ Built and tested on **PowerShell 7.3.1 (Core)**. The scripts avoid PowerShell 7-
 ---
 
 ## What's new
+
+### 1.5
+- **New dashboard design (`index.html`)** — menu on the left (Overview, Objects, Completed, and Edit for editors), a header with your **organisation name and logo** and key facts (objects, next alert, last alerted, report updated), view tabs with what needs fixing on the right. Light theme by default (dark when Windows is dark); the moon/sun button switches between light and dark and the browser remembers it.
+- **Overview page** — urgency cards, the 90-day timeline, **Upcoming alerts** (next alert per object: date, window, channel) and **Recent alerts** (what the alert script has sent).
+- The **Edit** button is only shown to members of the editors group: `index.html` asks `psToDo-api.ashx?action=whoami` (new, read-only, returns no data). Viewers, and sites without the editor, see no Edit button.
+- **The editor opens inside the dashboard** (Edit in the menu, the Edit tab or the pencil top right) instead of as a separate page; *Edit* on an object opens the editor at that object. Unsaved changes are kept while you switch views. `edit.html` still works on its own, and is now light by default with the same dark-theme button.
+- **Next alert** and **Last alerted** columns, read from `Files\state\sent-state.json` with the same rules as the alert script. Each object's **alert schedule** shows every window as *Sent ✓ (time)*, *Due – goes out on the next run*, *Pending – opens (date)* or *Not sent*.
+- **Timeline** of everything that expires in the next 90 days (hover for details, click to open the object). The **days box** in its header has a dropdown with 30 / 60 / 90 / 180 / 365 days, or you type your own number (1–3650) and press Enter; slide switches under the chart show or hide **Expired**, **Critical**, **Warning** and **OK** (expired objects get their own lane left of *Today*); the arrow hides the timeline. The browser remembers all of it.
+- **Stale-report warning** when the page is older than 24 hours — the scheduled report run has stopped.
+- **Export to CSV** (the rows you see, opens in Excel) and a **print view**.
+- Optional **`owner`** field per object, shown in the table, in the details and in `edit.html`.
+- Cleaner table: fixed column widths, right-aligned numbers, cards say *Within 7 days* instead of *Inside Datetrigger 1*.
+- **Teams webhook URLs are shortened** in `index.html` (host + last four characters). The full address is only in `edit.html`.
+- The local path of `monitorobjects.json` is no longer shown in the page. "Calender" is spelled "Calendar".
+- The page is built from `Settings\Web\report-template.html`; settings live in `Settings\Config\ReportSettings.json`.
+- New README section **[Publish with Entra application proxy and MFA](#publish-with-entra-application-proxy-and-mfa)**: Entra sign-in + MFA in front of the site, viewers and editors as AD groups, step by step.
 
 ### 1.4
 - Beta onprem version : psToDo\BETA-Onprem Exchange
@@ -67,7 +84,7 @@ Built and tested on **PowerShell 7.3.1 (Core)**. The scripts avoid PowerShell 7-
 |--------|-----|
 | `psToDo-v1.3.ps1` | Reads `db\monitorobjects.json`, decides what is due, and sends the alerts based on each object's configuration. |
 | `psToDo-HTML-Report-v1.3.ps1` | Reads `db\monitorobjects.json` and writes an HTML status page. |
-| `psToDo-HTML-Report-Editable-v1.4.ps1` | Writes `edit.html`: the same data as an editable page. Saves go through `Settings\Web\psToDo-api.ashx`. |
+| `psToDo-HTML-Report-Editable-v1.3.ps1` | Writes `edit.html`: the same data as an editable page. Saves go through `Settings\Web\psToDo-api.ashx`. |
 
 ![PstoDo](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/pstodo.jpg)
 
@@ -87,7 +104,33 @@ Built and tested on **PowerShell 7.3.1 (Core)**. The scripts avoid PowerShell 7-
 
 ## HTML dashboard
 
-The dashboard shows each object's expiry **urgency** (expired / critical / warning / ok) and its manual **Status** (Backlog / Active / Completed) as coloured badges. Message Center rows also show a **severity** badge and an **"Open in admin center"** link. Clicking a row expands its details.
+The dashboard opens on **Overview**: key facts in the header, one card per urgency (click to see those objects), a timeline of everything that expires in the next 90 days (hover for details, click to open the object; pick or type the number of days in the days box, or hide it with the arrow in its header – your browser remembers the choice), **Upcoming alerts** and **Recent alerts**. The **Monitored** tab is the object table. It shows each object's expiry **urgency** (expired / critical / warning / ok) and its manual **Status** (Backlog / Active / Completed) as badges with a symbol and a colour, plus **Next alert** (date, window and channel) and **Last alerted**, both read from `Files\state\sent-state.json`. Clicking a row opens its details: owner and object data, the alert schedule (sent ✓ / due / pending per window) and the mail and Teams settings. Message Center rows also show a **severity** badge and an **"Open in admin center"** link.
+
+The buttons at the top right **export the rows you see to CSV** (UTF-8; `;` as separator when Windows uses a decimal comma, so Excel opens it directly) and **print** (a light, compact layout). Members of the editors group also get **Edit** (top right, in the menu and as a tab), which opens the editor (`edit.html`) inside the dashboard; *Edit* in an object's details jumps straight to that object. The page asks `psToDo-api.ashx?action=whoami` whether you may edit, so viewers never see it. The page follows the light/dark setting of Windows until you press the moon/sun button; that choice is remembered in the browser and also applies to the editor. If the page is older than `StaleAfterHours` (24 h), a red banner says that the scheduled report run has probably stopped.
+
+Teams webhook URLs are **shortened** in `index.html` (`https://host/…abcd`): anyone who has a webhook URL can post to that channel, and the dashboard is often open to more people than the editors. The full URL is shown in `edit.html` only.
+
+**`Settings\Config\ReportSettings.json`:**
+
+```json
+{
+    "OrganizationName": "CONTOSO",
+    "LogoPath": "Settings\\Config\\logo.png",
+    "StaleAfterHours": 24,
+    "TimelineDays": 90,
+    "EditorUrl": ""
+}
+```
+
+| Setting | What it does |
+|---------|--------------|
+| `OrganizationName` | Shown in the header, the breadcrumb and the browser tab. Empty = "psToDo". |
+| `LogoPath` | PNG, JPG, GIF, SVG or WEBP, max 512 KB, relative to the script folder or a full path. Embedded in `index.html`, so no extra file on the web server. Empty = no logo. |
+| `StaleAfterHours` | When the "report is old" banner appears. Set it a little above the interval of the scheduled report task. |
+| `TimelineDays` | Default length of the timeline (90). The days box offers 30, 60, 90, 180 and 365 (and this value, if it is another number); viewers can also type their own (1–3650). |
+| `EditorUrl` | The editor page that Edit shows inside the dashboard. Empty = `edit.html` when it is next to `index.html`; `off` = never; or a URL. The button is only shown when `psToDo-api.ashx` (next to the editor) says the user is in the editors group. |
+
+`-OrganizationName` and `-LogoPath` on the command line override the file. The look of the page lives in `Settings\Web\report-template.html`.
 
 ![Web dashboard](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/wwebdashboard.jpg)
 
@@ -95,7 +138,8 @@ The dashboard shows each object's expiry **urgency** (expired / critical / warni
 
 | Tab | Shows |
 |-----|-------|
-| Monitored | Active objects |
+| Overview | Cards, 90-day timeline, upcoming and recent alerts |
+| Monitored | Active objects (table) |
 | Completed | Status `Completed`, read from `Files\config\MonitorObjectComplete.json` |
 | No channel | Objects with neither mail nor Teams enabled |
 | No credentials | App registrations with no secret or certificate |
@@ -137,7 +181,7 @@ A user who is added to the group must sign out and in again (new Kerberos ticket
 
 ## Editing in the browser (edit.html)
 
-`psToDo-HTML-Report-Editable-v1.4.ps1` writes `Files\report\edit.html` next to the dashboard. It shows the same objects as an editable table: name, expiry date, status, triggers and the **Mail** / **Teams** switches inline; target, environment, template, description, the mail settings and the **Teams settings (subject, body, webhook URL)** in each row's detail panel. Objects can be added, duplicated and deleted, and days left, urgency and the checks update while you type. Saving writes `Files\db\monitorobjects.json` directly; the alert script and `index.html` pick the change up on their next run.
+`psToDo-HTML-Report-Editable-v1.3.ps1` writes `Files\report\edit.html` next to the dashboard. It shows the same objects as an editable table: name, expiry date, status, triggers and the **Mail** / **Teams** switches inline; target, environment, template, description, the mail settings and the **Teams settings (subject, body, webhook URL)** in each row's detail panel. Objects can be added, duplicated and deleted, and days left, urgency and the checks update while you type. Saving writes `Files\db\monitorobjects.json` directly; the alert script and `index.html` pick the change up on their next run.
 
 | Who | What they get |
 |-----|---------------|
@@ -166,9 +210,9 @@ A user who is added to the group must sign out and in again (new Kerberos ticket
    .\Install-help\Setup-IisReportEditor.ps1 -WhatIf
    .\Install-help\Setup-IisReportEditor.ps1 -EditorsGroup 'CONTOSO\psToDo-Editors'
    ```
-3. Run `.\psToDo-HTML-Report-Editable-v1.4.ps1` (add it to the scheduled report task) and open `https://<server>/edit.html`. Members of the editors group see **Editing**.
+3. Run `.\psToDo-HTML-Report-Editable-v1.3.ps1` (add it to the scheduled report task) and open `https://<server>/edit.html`. Members of the editors group see **Editing**.
 
-> **Security:** editors decide who gets alert mail, what it says and which Teams channel webhook receives the alerts. Keep the editors group small. Viewers can see the webhook URLs, just as in `index.html`, and anyone who has a webhook URL can post to that channel.
+> **Security:** editors decide who gets alert mail, what it says and which Teams channel webhook receives the alerts. Keep the editors group small. Viewers of `edit.html` can see the full webhook URLs (`index.html` only shows a shortened form), and anyone who has a webhook URL can post to that channel.
 
 **Troubleshooting**
 
@@ -180,6 +224,141 @@ A user who is added to the group must sign out and in again (new Kerberos ticket
 | *Read-only* for an editor | Not a member of the group in `psToDo:EditorsGroup`, or not signed in again after being added. |
 | Save fails with *access denied* | The app pool lacks Modify on `Files\db`, `Files\backup\psToDo` or `Logs`: re-run `Setup-IisReportEditor.ps1`. |
 | Save refused: *changed by someone else* | Someone (or a plugin run) saved in between. Download your version, Reload, and apply your change again. |
+
+---
+
+## Publish with Entra application proxy and MFA
+
+This puts the dashboard behind **Microsoft Entra ID sign-in with MFA**, from the internet and from the office, without opening any inbound port. The sign-in is passed on to IIS with Kerberos, so IIS and `psToDo-api.ashx` still see the user's AD account and AD groups, exactly as with plain Windows sign-in.
+
+```
+Browser ──► https://pstodo.contoso.com  (DNS: CNAME to the app proxy, internally and externally)
+              │  Entra ID: sign-in + MFA (Conditional Access), app assigned to psToDo-Viewers + psToDo-Editors
+              ▼
+        Private network connector (Windows Server, outbound 80/443 only)
+              │  Kerberos as the user (KCD)
+              ▼
+        IIS01 ── index.html  : psToDo-Viewers + psToDo-Editors (IIS URL Authorization)
+              └─ edit.html   : saving only for psToDo-Editors (psToDo-api.ashx)
+```
+
+The examples use the tenant **CONTOSO**, the public name `pstodo.contoso.com`, the AD domain `LAB` (`lab.local`), the web server `IIS01` and the connector server `APPPROXY01`.
+
+### Before you start
+
+- **Licence:** Microsoft Entra ID P1 (or P2) for every user. It covers application proxy, group assignment and Conditional Access.
+- **AD groups, synced to Entra ID:** `LAB\psToDo-Viewers` (may open the dashboard) and `LAB\psToDo-Editors` (may also save in `edit.html`). They must be **on-premises AD groups synced with Entra Connect**. Cloud-only groups work for the Entra assignment, but they are not in the user's Kerberos ticket, so IIS and the save handler cannot see them.
+- **Users:** synced AD accounts (hybrid), so the connector can sign in as them.
+- **A public certificate** for `pstodo.contoso.com` as a **PFX with the private key and the intermediate certificates**.
+- **The dashboard already runs on IIS01** with `Install-help\Setup-IisReportSecurity.ps1` and, for editing, `Install-help\Setup-IisReportEditor.ps1` (see [Restrict who can see the site](#restrict-who-can-see-the-site-iis) and [Editing in the browser](#editing-in-the-browser-edithtml)).
+
+### Step 1 – IIS: groups, https and the SPN
+
+On **IIS01**:
+
+```powershell
+.\Install-help\Setup-IisReportSecurity.ps1 -SiteName psToDo -Group 'LAB\psToDo-Viewers'
+.\Install-help\Setup-IisReportEditor.ps1   -SiteName psToDo -EditorsGroup 'LAB\psToDo-Editors'
+```
+
+The second script also lets `LAB\psToDo-Editors` into the site, so editors do not need to be in the viewers group.
+
+- Add an **https binding** on port 443 for `pstodo.contoso.com` with a certificate for that name (the public one, or one from your own CA).
+- Register the SPN for the name on the account that does Windows authentication. With the default IIS settings (kernel-mode authentication, ApplicationPoolIdentity) that is the web server's computer account:
+
+```powershell
+setspn -S HTTP/pstodo.contoso.com LAB\IIS01$
+```
+
+### Step 2 – Install the connector
+
+On **APPPROXY01** (a domain-joined Windows Server, not the web server, not a domain controller):
+
+1. Entra admin center → **Global Secure Access** → **Connect** → **Connectors** → **Download connector service**, and run the installer. Sign in with an Application Administrator account when it asks.
+2. Allow **outbound** 80 and 443 to the Microsoft URLs the installer lists. No inbound port is needed.
+3. Windows Server 2019 or later: turn off HTTP/2 in WinHttp, which Kerberos delegation needs, then restart the server:
+
+```cmd
+REG ADD HKLM\SYSTEM\CurrentControlSet\Services\WinHttp /v EnableDefaultHTTP2 /t REG_DWORD /d 0
+```
+
+Install a second connector on another server for high availability.
+
+### Step 3 – Let the connector sign in as the user (Kerberos delegation)
+
+On a domain controller → **Active Directory Users and Computers** → computer **APPPROXY01** → **Properties** → **Delegation**:
+
+1. **Trust this computer for delegation to specified services only**
+2. **Use any authentication protocol**
+3. **Add** → the account `IIS01` → service **HTTP/pstodo.contoso.com**
+
+If the connector and IIS01 are in different domains, use resource-based delegation instead (run on a DC in IIS01's domain):
+
+```powershell
+$connector = Get-ADComputer -Identity APPPROXY01
+Set-ADComputer -Identity IIS01 -PrincipalsAllowedToDelegateToAccount $connector
+```
+
+### Step 4 – Publish the app in Entra ID
+
+1. **Domain:** Entra admin center → **Entra ID** → **Domain names** → `contoso.com` must be listed and verified.
+2. **Entra ID** → **Enterprise applications** → **Application proxy** → **New application** → **Add an on-premises application**:
+   - **Name:** `psToDo`
+   - **Internal URL:** `https://pstodo.contoso.com/`
+   - **External URL:** `https://pstodo.contoso.com/` (choose `contoso.com` in the domain list)
+   - **Pre Authentication:** Microsoft Entra ID
+   - **Connector group:** the group with APPPROXY01
+   - Select **Add**, upload the PFX under **Certificate**, then **Save**.
+3. **Single sign-on** → **Integrated Windows authentication**:
+   - **Internal Application SPN:** `HTTP/pstodo.contoso.com`
+   - **Delegated Login Identity:** User principal name (when the AD UPN is the same as the Entra sign-in name; otherwise *On-premises SAM account name*)
+4. **Properties** → **Assignment required?** = **Yes**.
+5. **Users and groups** → **Add user/group** → `psToDo-Viewers` and `psToDo-Editors`. Everyone else is stopped by Entra ID before they reach your network.
+6. If users get a consent prompt or an AADSTS error the first time they sign in: **Permissions** → **Grant admin consent**.
+
+Keeping the **internal and external URL the same** matters: the save handler only accepts saves where the browser's address matches the Host header, and links work the same everywhere.
+
+### Step 5 – DNS
+
+- **Public DNS:** `pstodo.contoso.com` → **CNAME** to the `….msappproxy.net` name shown in the information bar on the app's **Application proxy** page. Never point it at an IP address.
+- **Internal DNS:** the same CNAME, so users on the office network also go through Entra ID and MFA.
+- **The connector must still reach IIS01 directly.** Because the internal URL resolves to the proxy everywhere, add the web server to the **hosts file on each connector server** (`C:\Windows\System32\drivers\etc\hosts`):
+
+```
+10.0.0.20    pstodo.contoso.com     # IIS01 - used by the app proxy connector only
+```
+
+Without this line the connector looks up `pstodo.contoso.com`, gets the proxy, and requests fail.
+
+### Step 6 – Conditional Access: require MFA
+
+Entra admin center → **Entra ID** → **Conditional Access** → **Create new policy**:
+
+- **Name:** `psToDo - require MFA`
+- **Users:** include `psToDo-Viewers` and `psToDo-Editors`; exclude your break-glass accounts
+- **Target resources:** **Select resources** → `psToDo`
+- **Grant:** **Grant access** → **Require multifactor authentication** (or an authentication strength)
+- Optional: **Session** → **Sign-in frequency**, for example 8 hours
+- **Enable policy:** **Report-only** first, check the sign-in logs, then **On**
+
+### Step 7 – Close the side door (recommended)
+
+With DNS pointing at the proxy, normal use goes through MFA. Someone who types `https://iis01.lab.local` or the server's IP still reaches IIS directly, with only Windows sign-in. To stop that, allow only the connector servers on the site: IIS Manager → site → **IP Address and Domain Restrictions** → **Add Allow Entry** for APPPROXY01 (and the second connector), then **Edit Feature Settings** → *Access for unspecified clients* = **Deny**. Keep an allow entry for the admin workstation if you test from there.
+
+### Step 8 – Test
+
+| Who | Expected |
+|-----|----------|
+| Member of `psToDo-Viewers` | Entra sign-in + MFA → dashboard, **no Edit button**; `edit.html` opens read-only |
+| Member of `psToDo-Editors` | Entra sign-in + MFA → dashboard **with Edit** (top right and in the menu); saving in `edit.html` works |
+| Someone in neither group | Stopped by Entra ID ("not assigned to this application") |
+| Direct to `https://iis01.lab.local` from another PC | Refused (Step 7) |
+
+**If something fails:**
+
+- *"Incorrect Kerberos constrained delegation configuration"* or HTTP 500 from the proxy: check the SPN (`setspn -Q HTTP/pstodo.contoso.com`), the delegation on APPPROXY01 and the hosts-file line. The connector writes details in Event Viewer → **Applications and Services Logs** → **Microsoft** → **Microsoft Entra private network** → **Connector** → **Admin**.
+- Everyone gets read-only / no Edit button: the editors group is not in the Kerberos ticket (cloud-only group, or the user signed in before being added – sign out and in again), or `psToDo-api.ashx` is old: run `.\psToDo-HTML-Report-Editable-v1.3.ps1` once, it copies the current handler.
+- Save is refused with *Cross-site requests are not allowed*: the internal and external URL differ. Make them the same (Step 4).
 
 ---
 
@@ -312,6 +491,7 @@ Every entry describes one thing to watch. Nothing is shared between objects.
 | `template` | string | Free-text tag for the kind of object. Context only. |
 | `servername` | string | The host or resource the object belongs to. Shown in every alert. |
 | `environment` | string | Which environment it lives in. Context only. |
+| `owner` | string | Optional. Who is responsible. Shown in the dashboard (own column when any object has it) and editable in `edit.html`. Not used in alerting. |
 | `status` | string | Optional badge: `Backlog`, `Active` or `Completed`. Defaults to `Backlog`. Not used in alerting. |
 | `description` | string | The "Action required" text in the mail/card — write real instructions here. |
 | `1dateTrigger` | number | First alert point, days before expiry. |
@@ -384,7 +564,7 @@ Reads every service announcement message and keeps **only** those with an `actio
 ```
 psToDo-v1.3.ps1                              Evaluate and alert
 psToDo-HTML-Report-v1.3.ps1                  Build the HTML dashboard
-psToDo-HTML-Report-Editable-v1.4.ps1         Build the editable dashboard (edit.html)
+psToDo-HTML-Report-Editable-v1.3.ps1         Build the editable dashboard (edit.html)
 
 Install-help\
   Setup-SenderMailbox-and-AccessPolicy.ps1   Create the alert sender mailbox + access policy (optional)
@@ -398,9 +578,11 @@ Settings\
                          Format-AlertMailBody, Get-AlertPresentation, Get-SentState,
                          Initialize-RequiredModules, Save-SentState, Send-AlertMail,
                          Send-AlertNotification, Send-AlertTeams
-    psToDo-HtmlReport\   Get-Urgency, Test-NotifyFlag
+    psToDo-HtmlReport\   Get-Urgency, Test-NotifyFlag, Get-AlertPlan (next/last alert,
+                         webhook masking, JSON embedding)
   Config\
     MsGraphSettings.json   Tenant, app and certificate
+    ReportSettings.json    Dashboard: organisation name, logo, stale warning, timeline
     version.json           Tool version + change note + history
   plugin\
     Import-EntraAppRegistrations-v1.3.ps1              Entra secret & cert expiry (app-registration auth)
@@ -410,8 +592,10 @@ Settings\
     entra\config\          entra-app-defaults.json, version.json
     messagecenter\config\  messagecenter-defaults.json, version.json
   Web\
+    report-template.html   Template for index.html (the dashboard)
     edit-template.html     Template for edit.html
-    psToDo-api.ashx        Load/save handler for edit.html (copied next to it on every run)
+    psToDo-api.ashx        Load/save handler for edit.html (copied next to it on every run);
+                           ?action=whoami tells index.html whether to show Edit
 
 Files\
   db\monitorobjects.json               The objects being watched
@@ -434,4 +618,5 @@ Logs\                                  Per-run transcripts + psToDo-web-edits.lo
 [x] Report tabs — Monitored / Completed / No channel / No credentials / Not monitored
 [x] Completed archive (Files\config\MonitorObjectComplete.json) with per-object copy date
 [x] Editable dashboard (edit.html): AD-group editing incl. Teams settings, version-checked saves
+[x] Dashboard 1.5: org name + logo, next/last alert, 90-day timeline, CSV export, print view, light/dark theme
 ```
