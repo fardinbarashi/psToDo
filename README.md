@@ -47,7 +47,7 @@ Built and tested on **PowerShell 7.3.1 (Core)**. The scripts avoid PowerShell 7-
 - New README section **[Publish with Entra application proxy and MFA](#publish-with-entra-application-proxy-and-mfa)**: Entra sign-in + MFA in front of the site, viewers and editors as AD groups, step by step.
 
 ### 1.4
-- Beta onprem version : psToDo\BETA-Onprem Exchange
+- Beta onprem version : Use https://github.com/fardinbarashi/PstoDoOnPremEdition/
 - **Editable dashboard (`edit.html`)** — the browser editor from the on-prem edition, now with **Teams** support: change objects, triggers, status, mail and Teams settings (including the webhook URL), add, duplicate and delete objects, and save straight back to `monitorobjects.json`. Only members of an AD editors group can save; everyone else who can open the site gets a read-only view. Every save is version-checked, backed up and logged. See [Editing in the browser](#editing-in-the-browser-edithtml).
 - **IIS setup scripts** — `Install-help\Setup-IisReportSecurity.ps1` (Windows sign-in + IIS URL Authorization: only an AD group can open the site) and `Install-help\Setup-IisReportEditor.ps1` (turns on saving). A commented `Files\report\web.config` ships with the repo.
 - **Fixes**
