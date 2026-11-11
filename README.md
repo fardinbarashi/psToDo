@@ -14,6 +14,7 @@ Built and tested on **PowerShell 7.3.1 (Core)**. The scripts avoid PowerShell 7-
 - [Requirements](#requirements)
 - [HTML dashboard](#html-dashboard)
 - [Editing in the browser (edit.html)](#editing-in-the-browser-edithtml)
+- [Tools](#tools)
 - [Publish with Entra application proxy and MFA](#publish-with-entra-application-proxy-and-mfa)
 - [App registration & Graph permissions](#app-registration--graph-permissions)
 - [How alerting works](#how-alerting-works)
@@ -29,10 +30,11 @@ Built and tested on **PowerShell 7.3.1 (Core)**. The scripts avoid PowerShell 7-
 ## What's new
 
 ### 1.5
-- **New dashboard design (`index.html`)** — menu on the left (Overview, Objects, Completed, and Edit for editors), a header with your **organisation name and logo** and key facts (objects, next alert, last alerted, report updated), view tabs with what needs fixing on the right. Light theme by default (dark when Windows is dark); the moon/sun button switches between light and dark and the browser remembers it.
+- **New dashboard design (`index.html`)** — menu on the left (Overview, Objects, Completed, and Edit for editors), a header with your **organisation name and logo** and key facts (objects, next alert, last alerted, report updated), view tabs with what needs fixing on the right. Light theme by default (dark when Windows is dark). **Other** in the menu holds Export CSV, Print and the light/dark switch; the browser remembers the theme.
 - **Overview page** — urgency cards, the 90-day timeline, **Upcoming alerts** (next alert per object: date, window, channel) and **Recent alerts** (what the alert script has sent).
+- **Tools** for editors (menu under Edit data): run the importers, update the dashboard now, preview today's alerts, send a test message, send an alert again, restore a backup, see runs and logs, and a health check. The web page never runs a script: it orders it, and a scheduled task runs it. See [Tools](#tools).
 - The **Edit** button is only shown to members of the editors group: `index.html` asks `psToDo-api.ashx?action=whoami` (new, read-only, returns no data). Viewers, and sites without the editor, see no Edit button.
-- **The editor opens inside the dashboard** (Edit in the menu, the Edit tab or the pencil top right) instead of as a separate page; *Edit* on an object opens the editor at that object. Unsaved changes are kept while you switch views. `edit.html` still works on its own, and is now light by default with the same dark-theme button.
+- **The editor opens inside the dashboard** (Edit data in the menu or as a tab) instead of as a separate page; *Edit* on an object opens the editor at that object. Unsaved changes are kept while you switch views. `edit.html` still works on its own, and is now light by default with the same dark-theme button.
 - **Next alert** and **Last alerted** columns, read from `Files\state\sent-state.json` with the same rules as the alert script. Each object's **alert schedule** shows every window as *Sent ✓ (time)*, *Due – goes out on the next run*, *Pending – opens (date)* or *Not sent*.
 - **Timeline** of everything that expires in the next 90 days (hover for details, click to open the object). The **days box** in its header has a dropdown with 30 / 60 / 90 / 180 / 365 days, or you type your own number (1–3650) and press Enter; slide switches under the chart show or hide **Expired**, **Critical**, **Warning** and **OK** (expired objects get their own lane left of *Today*); the arrow hides the timeline. The browser remembers all of it.
 - **Stale-report warning** when the page is older than 24 hours — the scheduled report run has stopped.
@@ -85,6 +87,7 @@ Built and tested on **PowerShell 7.3.1 (Core)**. The scripts avoid PowerShell 7-
 | `psToDo-v1.3.ps1` | Reads `db\monitorobjects.json`, decides what is due, and sends the alerts based on each object's configuration. |
 | `psToDo-HTML-Report-v1.3.ps1` | Reads `db\monitorobjects.json` and writes an HTML status page. |
 | `psToDo-HTML-Report-Editable-v1.3.ps1` | Writes `edit.html`: the same data as an editable page. Saves go through `Settings\Web\psToDo-api.ashx`. |
+| `psToDo-Tools-v1.0.ps1` | Runs the tools that editors order in the dashboard. Scheduled task, every minute. |
 
 ![PstoDo](https://raw.githubusercontent.com/fardinbarashi/psToDo/refs/heads/main/githubRepoContentDeleteIfYouWant/IMG/pstodo.jpg)
 
@@ -106,7 +109,7 @@ Built and tested on **PowerShell 7.3.1 (Core)**. The scripts avoid PowerShell 7-
 
 The dashboard opens on **Overview**: key facts in the header, one card per urgency (click to see those objects), a timeline of everything that expires in the next 90 days (hover for details, click to open the object; pick or type the number of days in the days box, or hide it with the arrow in its header – your browser remembers the choice), **Upcoming alerts** and **Recent alerts**. The **Monitored** tab is the object table. It shows each object's expiry **urgency** (expired / critical / warning / ok) and its manual **Status** (Backlog / Active / Completed) as badges with a symbol and a colour, plus **Next alert** (date, window and channel) and **Last alerted**, both read from `Files\state\sent-state.json`. Clicking a row opens its details: owner and object data, the alert schedule (sent ✓ / due / pending per window) and the mail and Teams settings. Message Center rows also show a **severity** badge and an **"Open in admin center"** link.
 
-The buttons at the top right **export the rows you see to CSV** (UTF-8; `;` as separator when Windows uses a decimal comma, so Excel opens it directly) and **print** (a light, compact layout). Members of the editors group also get **Edit** (top right, in the menu and as a tab), which opens the editor (`edit.html`) inside the dashboard; *Edit* in an object's details jumps straight to that object. The page asks `psToDo-api.ashx?action=whoami` whether you may edit, so viewers never see it. The page follows the light/dark setting of Windows until you press the moon/sun button; that choice is remembered in the browser and also applies to the editor. If the page is older than `StaleAfterHours` (24 h), a red banner says that the scheduled report run has probably stopped.
+**Other** in the menu **exports the rows you see to CSV** (UTF-8; `;` as separator when Windows uses a decimal comma, so Excel opens it directly) and **prints** (a light, compact layout). Members of the editors group also get **Edit data** and **Tools** (in the menu and as tabs). Edit data opens the editor (`edit.html`) inside the dashboard; *Edit* in an object's details jumps straight to that object. The page asks `psToDo-api.ashx?action=whoami` whether you may edit, so viewers never see it. The page follows the light/dark setting of Windows until you choose Dark theme or Light theme under **Other**; that choice is remembered in the browser and also applies to the editor. If the page is older than `StaleAfterHours` (24 h), a red banner says that the scheduled report run has probably stopped.
 
 Teams webhook URLs are **shortened** in `index.html` (`https://host/…abcd`): anyone who has a webhook URL can post to that channel, and the dashboard is often open to more people than the editors. The full URL is shown in `edit.html` only.
 
@@ -224,6 +227,46 @@ A user who is added to the group must sign out and in again (new Kerberos ticket
 | *Read-only* for an editor | Not a member of the group in `psToDo:EditorsGroup`, or not signed in again after being added. |
 | Save fails with *access denied* | The app pool lacks Modify on `Files\db`, `Files\backup\psToDo` or `Logs`: re-run `Setup-IisReportEditor.ps1`. |
 | Save refused: *changed by someone else* | Someone (or a plugin run) saved in between. Download your version, Reload, and apply your change again. |
+
+---
+
+## Tools
+
+Members of the editors group get **Tools** in the menu, under Edit data. Viewers do not see it and the server refuses them.
+
+| Tool | What it does |
+|------|--------------|
+| Import Entra app registrations | Runs `Import-EntraAppRegistrations-v1.3.ps1`, then rebuilds the dashboard. |
+| Import Microsoft 365 Message Center | Runs `Import-M365MessageCenter-v1.1.3.ps1`, then rebuilds the dashboard. |
+| Update dashboard now | Runs the report scripts, so saved changes show at once. Also behind *Update dashboard now* in the editor. |
+| Preview today's alerts | Runs `psToDo-v1.3.ps1 -WhatIf`. Shows what would be sent. Nothing is sent. |
+| Send test message | Sends one object's alert marked `[TEST]`, by mail, Teams or both. Leave the address empty to use the object's own recipients. |
+| Send alert again | Clears the alert history of one object, so it alerts again on the next run of the alert script. |
+| Health check | Graph settings and certificate, network to Microsoft, last run of the alert and report scripts, scheduled tasks. |
+
+Below the tools: **Runs** (who ordered what, status and the output), **Backups** of `monitorobjects.json` with **Restore** (the current file is backed up first), and the latest lines of the edit log.
+
+The two *Delegated* importers are not in the list: they need a person to sign in.
+
+**How it works.** The web page never runs a script.
+
+1. You press **Run**. `psToDo-api.ashx` writes a small request file to `Files\queue\requests` (tool name, who, when).
+2. A scheduled task runs `psToDo-Tools-v1.0.ps1` every minute as the psToDo service account. It runs the script for that tool from the fixed list inside `psToDo-Tools-v1.0.ps1` and checks the values (object id, channel, address).
+3. Status and output go to `Files\queue\runs` and `Files\queue\logs`; the page shows them.
+
+So the web server gets no new rights, and nothing can be run that is not on the list. A run starts within about a minute. If the task has not been seen for three minutes, the page says so.
+
+**Setup** (as Administrator on the psToDo server):
+
+```powershell
+.\Install-help\Setup-IisReportEditor.ps1 -SiteName psToDo -EditorsGroup 'CONTOSO\psToDo-Editors'   # again: adds the queue folder
+.\Install-help\Setup-ToolsRunner.ps1 -Credential (Get-Credential CONTOSO\psToDo-Service)                # the scheduled task
+.\psToDo-HTML-Report-Editable-v1.3.ps1                                                              # copies the current psToDo-api.ashx
+```
+
+Use the account that already runs `psToDo-v1.3.ps1` (it needs "Log on as a batch job"). A group managed service account works with `-GmsaAccount 'CONTOSO\psToDo-Service$'`.
+
+To add a tool, add it to `$tools` in `psToDo-Tools-v1.0.ps1`. The page reads the list from there.
 
 ---
 
@@ -350,7 +393,7 @@ With DNS pointing at the proxy, normal use goes through MFA. Someone who types `
 | Who | Expected |
 |-----|----------|
 | Member of `psToDo-Viewers` | Entra sign-in + MFA → dashboard, **no Edit button**; `edit.html` opens read-only |
-| Member of `psToDo-Editors` | Entra sign-in + MFA → dashboard **with Edit** (top right and in the menu); saving in `edit.html` works |
+| Member of `psToDo-Editors` | Entra sign-in + MFA → dashboard **with Edit and Tools** in the menu; saving in `edit.html` works |
 | Someone in neither group | Stopped by Entra ID ("not assigned to this application") |
 | Direct to `https://iis01.lab.local` from another PC | Refused (Step 7) |
 
@@ -564,6 +607,7 @@ Reads every service announcement message and keeps **only** those with an `actio
 ```
 psToDo-v1.3.ps1                              Evaluate and alert
 psToDo-HTML-Report-v1.3.ps1                  Build the HTML dashboard
+psToDo-Tools-v1.0.ps1                        Run the tools ordered in the dashboard (scheduled task)
 psToDo-HTML-Report-Editable-v1.3.ps1         Build the editable dashboard (edit.html)
 
 Install-help\
@@ -571,6 +615,7 @@ Install-help\
   Create a self-signed cert to app-reg.ps1   Create the Graph client certificate (optional)
   Setup-IisReportSecurity.ps1                IIS: Windows sign-in, only an AD group may open the site
   Setup-IisReportEditor.ps1                  IIS: turn on saving from edit.html for an editors group
+  Setup-ToolsRunner.ps1                      Scheduled task for Tools (psToDo-Tools-v1.0.ps1)
 
 Settings\
   Functions\
@@ -595,12 +640,18 @@ Settings\
     report-template.html   Template for index.html (the dashboard)
     edit-template.html     Template for edit.html
     psToDo-api.ashx        Load/save handler for edit.html (copied next to it on every run);
-                           ?action=whoami tells index.html whether to show Edit
+                           ?action=whoami tells index.html whether to show Edit;
+                           also takes the Tools orders
+  Tools\
+    Send-TestMessage.ps1   Test mail / Teams message for one object
+    Reset-AlertState.ps1   Clear the alert history of one object
+    Test-Health.ps1        Health check
 
 Files\
   db\monitorobjects.json               The objects being watched
   config\MonitorObjectComplete.json    Copy of every Completed object + copy date (auto-managed)
   state\sent-state.json                What has already been alerted (auto-managed)
+  queue\                               Tools: requests, runs and their output (auto-managed)
   report\index.html                    Generated dashboard
   report\edit.html                     Generated editable dashboard (+ psToDo-api.ashx)
   report\web.config                    IIS access control (written by the setup scripts)
@@ -619,4 +670,5 @@ Logs\                                  Per-run transcripts + psToDo-web-edits.lo
 [x] Completed archive (Files\config\MonitorObjectComplete.json) with per-object copy date
 [x] Editable dashboard (edit.html): AD-group editing incl. Teams settings, version-checked saves
 [x] Dashboard 1.5: org name + logo, next/last alert, 90-day timeline, CSV export, print view, light/dark theme
+[x] Tools for editors: importers, update now, alert preview, test message, restore backup, health check
 ```

@@ -94,6 +94,13 @@
   .nav-badge { position: absolute; top: 7px; left: 50%; margin-left: 6px; min-width: 18px; height: 18px; padding: 0 5px;
                border-radius: 9px; background: #d03b3b; color: #fff; font-size: 10.5px; font-weight: 700; line-height: 18px; text-align: center; }
   .nav-sep { height: 1px; background: var(--side-line); margin: 8px 14px; }
+  .side-menu { position: fixed; z-index: 40; min-width: 190px; padding: 6px; background: var(--surface); color: var(--fg);
+               border: 1px solid var(--line-2); border-radius: 8px; box-shadow: 0 10px 28px rgba(0, 0, 0, .22); }
+  .side-menu button { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; padding: 9px 12px;
+                      border-radius: 6px; font: inherit; font-size: 13.5px; color: inherit; cursor: pointer; text-align: left; }
+  .side-menu button:hover, .side-menu button:focus { background: var(--accent-soft); outline: none; }
+  .side-menu svg.i { color: var(--accent-ink); }
+  .nav-item[aria-expanded="true"] { color: #fff; background: rgba(255, 255, 255, .08); }
   .side-foot { margin-top: auto; padding: 12px 6px; text-align: center; font-size: 10px; opacity: .7; }
 
   .topbar { display: flex; align-items: stretch; height: 60px; background: var(--surface);
@@ -105,12 +112,6 @@
   .crumbs .sep { opacity: .6; }
   .crumbs span { white-space: nowrap; }
   .crumbs .crumb-org { display: inline-flex; gap: 8px; align-items: center; }
-  .actions { margin-left: auto; display: flex; }
-  .act { width: 60px; border: 0; border-left: 1px solid rgba(255, 255, 255, .35); background: var(--accent);
-         color: #fff; cursor: pointer; display: grid; place-items: center; }
-  .act:hover { background: var(--accent-hover); }
-  .act:focus-visible { outline: 2px solid var(--fg); outline-offset: -4px; }
-  .act svg.i { width: 20px; height: 20px; }
 
   /* ---------- profile header ---------- */
   .profile { background: var(--surface); border-bottom: 1px solid var(--line); padding: 26px 28px 0; }
@@ -216,6 +217,45 @@
   .editor-panel { overflow: hidden; }
   .editor-panel iframe { display: block; width: 100%; border: 0; background: var(--bg); min-height: 480px; }
   .editor-note { font-size: 12px; color: var(--muted); }
+
+  /* ---------- tools ---------- */
+  .btn { border: 1px solid var(--line-2); background: var(--surface); color: var(--fg); border-radius: 6px; padding: 6px 14px;
+         cursor: pointer; font-size: 13px; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .btn.primary:hover { background: var(--accent-hover); }
+  .btn.danger { border-color: var(--s-crit); color: var(--x-expired); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tools-body { padding: 4px 20px 20px; }
+  .tool-group { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 16px 0 8px; }
+  .tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .tool { border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; background: var(--surface-2); display: flex; flex-direction: column; gap: 8px; }
+  .tool b { font-size: 14px; font-weight: 600; }
+  .tool-desc { font-size: 12.5px; color: var(--fg-2); flex: 1; }
+  .tool-args { display: grid; gap: 6px; }
+  .tool-args label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .tool-args select, .tool-args input { width: 100%; height: 32px; padding: 0 8px; border: 1px solid var(--line-2); border-radius: 6px;
+                                         background: var(--surface); color: var(--fg); font: inherit; font-size: 13px; }
+  .tool-args select:focus, .tool-args input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .tool-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .tool-msg { font-size: 12px; color: var(--muted); }
+  .tool-msg.bad { color: var(--x-expired); }
+  .tool-last { font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; }
+  .st { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px; white-space: nowrap; background: var(--t-none); }
+  .st.ok { background: var(--t-ok); }
+  .st.failed, .st.timeout { background: var(--t-crit); }
+  .st.rejected { background: var(--t-warn); }
+  .st.running { background: var(--accent-soft); color: var(--accent-ink); }
+  .st .spin { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--accent); border-top-color: transparent; animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  pre.log { margin: 0; padding: 12px 14px; max-height: 420px; overflow: auto; background: var(--surface); border: 1px solid var(--line);
+            border-radius: 6px; font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+  .saves { list-style: none; margin: 0; padding: 4px 20px 12px; font-size: 12.5px; }
+  .saves li { padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .saves li:last-child { border-bottom: 0; }
+  .saves .when { color: var(--muted); font-size: 11.5px; }
+  .two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 
   /* ---------- timeline ---------- */
   .tl-wrap { position: relative; padding: 18px 20px 4px; }
@@ -370,14 +410,14 @@
     .app.nav-hidden .side { visibility: visible; }
     .profile, .content { padding-left: 16px; padding-right: 16px; }
     .profile-grid { grid-template-columns: 1fr 1fr; gap: 6px 20px; }
-    .feeds { grid-template-columns: minmax(0, 1fr); }
+    .feeds, .two-col { grid-template-columns: minmax(0, 1fr); }
     .attn { display: none; }
     .ident { grid-column: 1 / -1; margin-bottom: 8px; }
     .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     .detail-grid { grid-template-columns: minmax(0, 1fr); }
     tr.detail > td { padding: 4px 10px 16px; }
     .crumbs .hide-sm { display: none; }
-    .act, .menu { width: 48px; }
+    .menu { width: 48px; }
     .search { width: 100%; }
   }
 
@@ -396,7 +436,7 @@
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body { font-size: 11px; background: #fff; }
     .app, .app.nav-hidden { display: block; }
-    .side, .topbar, .tabbar, .toolbar, #stale, footer .no-print, .tl-combo, .collapse { display: none !important; }
+    .side, .topbar, .tabbar, .toolbar, #stale, footer .no-print, .tl-combo, .collapse, .side-menu { display: none !important; }
     .feeds { grid-template-columns: 1fr 1fr; }
     .print-head { display: flex; justify-content: space-between; align-items: baseline; padding: 0 0 8px;
                   border-bottom: 2px solid var(--fg); margin-bottom: 12px; }
@@ -436,11 +476,18 @@
       <button class="nav-item" data-go="overview"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1"/></svg>Overview</button>
       <button class="nav-item" data-go="monitored"><svg class="i" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01" stroke-width="2.6"/></svg><span class="nav-badge" id="navBadge" hidden></span>Objects</button>
       <button class="nav-item" data-go="completed"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.3 12.3l2.6 2.6 4.9-5.2"/></svg>Completed</button>
+      <button class="nav-item" id="navOther" aria-haspopup="menu" aria-expanded="false" aria-controls="otherMenu"><svg class="i" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18.5" cy="12" r="1.4"/></svg>Other</button>
       <div class="nav-sep" id="navSep" hidden></div>
-      <button class="nav-item" data-go="edit" id="navEditor" hidden><svg class="i" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Edit</button>
+      <button class="nav-item" data-go="edit" id="navEditor" hidden><svg class="i" viewBox="0 0 24 24"><path d="M4 20l1-4.6L16.1 4.3a2.05 2.05 0 0 1 2.9 0l.7.7a2.05 2.05 0 0 1 0 2.9L8.6 19z"/><path d="M13.5 20H20"/></svg>Edit data</button>
+      <button class="nav-item" data-go="tools" id="navTools" hidden><svg class="i" viewBox="0 0 24 24"><path d="M15.3 5.1a4.6 4.6 0 0 0-6 6L3.7 16.7a2.15 2.15 0 0 0 3 3.1l5.7-5.7a4.6 4.6 0 0 0 6-6l-3 3-2.5-.6-.6-2.5z"/></svg>Tools</button>
     </nav>
     <div class="side-foot" id="sideFoot"></div>
   </aside>
+  <div class="side-menu" id="otherMenu" role="menu" aria-label="Other" hidden>
+    <button role="menuitem" id="export"><svg class="i" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M5 20h14"/></svg>Export CSV</button>
+    <button role="menuitem" id="print"><svg class="i" viewBox="0 0 24 24"><path d="M7 9V4h10v5"/><rect x="4" y="9" width="16" height="8" rx="1.5"/><path d="M7 14h10v6H7z"/></svg>Print</button>
+    <button role="menuitem" id="themeBtn"></button>
+  </div>
 
   <div class="main" id="top">
     <header class="topbar">
@@ -452,12 +499,6 @@
         <span class="sep hide-sm">/</span>
         <span class="cur" id="crumbView">Monitored</span>
       </nav>
-      <div class="actions">
-        <button class="act" id="themeBtn" title="Dark theme" aria-label="Switch to dark theme"></button>
-        <button class="act" id="export" title="Export CSV (the rows you see)" aria-label="Export CSV"><svg class="i" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M5 20h14"/></svg></button>
-        <button class="act" id="print" title="Print" aria-label="Print"><svg class="i" viewBox="0 0 24 24"><path d="M7 9V4h10v5"/><rect x="4" y="9" width="16" height="8" rx="1.5"/><path d="M7 14h10v6H7z"/></svg></button>
-        <button class="act" id="actEdit" data-go="edit" title="Edit objects" aria-label="Edit objects" hidden><svg class="i" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>
-      </div>
     </header>
 
     <section class="profile">
@@ -512,9 +553,31 @@
       </div>
 
       <section class="panel editor-panel" id="editor" aria-labelledby="editorTitle" style="display:none">
-        <div class="panel-head"><h2 id="editorTitle">Edit objects</h2><div class="right"><span class="editor-note">Saved changes show here after the next report run.</span></div></div>
+        <div class="panel-head"><h2 id="editorTitle">Edit objects</h2><div class="right"><span class="editor-note">Saved changes show here after the next report run.</span><button class="link-btn" id="editRebuild">Update dashboard now</button></div></div>
         <div id="editorMount"></div>
       </section>
+
+      <div id="tools" style="display:none">
+        <div id="toolsNotice"></div>
+        <section class="panel" aria-labelledby="toolsTitle">
+          <div class="panel-head"><h2 id="toolsTitle">Tools</h2><div class="right"><span class="count" id="runnerInfo"></span><button class="link-btn" id="toolsRefresh">Refresh</button></div></div>
+          <div class="tools-body" id="toolCards"></div>
+        </section>
+        <section class="panel" aria-labelledby="runsTitle">
+          <div class="panel-head"><h2 id="runsTitle">Runs</h2><div class="right"><span class="count" id="runsCount"></span></div></div>
+          <div class="table-wrap" id="toolRuns"></div>
+        </section>
+        <div class="two-col">
+          <section class="panel" aria-labelledby="backupsTitle">
+            <div class="panel-head"><h2 id="backupsTitle">Backups of monitorobjects.json</h2><div class="right"><span class="tool-msg" id="restoreMsg"></span></div></div>
+            <div class="table-wrap" id="toolBackups"></div>
+          </section>
+          <section class="panel" aria-labelledby="savesTitle">
+            <div class="panel-head"><h2 id="savesTitle">Recent saves and orders</h2></div>
+            <ul class="saves" id="toolSaves"></ul>
+          </section>
+        </div>
+      </div>
 
       <section class="panel" id="objects" aria-labelledby="tableTitle">
         <div class="panel-head"><h2 id="tableTitle">Monitored objects</h2><div class="right"><span class="count" id="count"></span></div></div>
@@ -576,7 +639,7 @@ const ICON = {
   chev:  '<svg class="i" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>',
   mail:  '<svg class="i" viewBox="0 0 24 24"><rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M3.5 7l8.5 6 8.5-6"/></svg>',
   teams: '<svg class="i" viewBox="0 0 24 24"><path d="M4 5h16v11H10l-6 4z"/></svg>',
-  edit:  '<svg class="i" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
+  edit:  '<svg class="i" viewBox="0 0 24 24"><path d="M4 20l1-4.6L16.1 4.3a2.05 2.05 0 0 1 2.9 0l.7.7a2.05 2.05 0 0 1 0 2.9L8.6 19z"/><path d="M13.5 20H20"/></svg>',
   check: '<svg class="i" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   clock: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/></svg>',
   send:  '<svg class="i" viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2.5-6.5z"/></svg>',
@@ -602,7 +665,8 @@ const TABS = [
   { key: 'nochannel',    label: 'No channel',     attn: true },
   { key: 'noncred',      label: 'No credentials' },
   { key: 'notmonitored', label: 'Not monitored',  attn: true },
-  { key: 'edit',         label: 'Edit',           editor: true }
+  { key: 'edit',         label: 'Edit data',      editor: true },
+  { key: 'tools',        label: 'Tools',          editor: true }
 ];
 
 const DEFAULTS = { filter: '', urgency: null, sortKey: 'daysLeft', sortDir: 1, tab: 'overview' };
@@ -770,7 +834,7 @@ function renderTabs() {
   const cur = TABS.filter(t => t.key === state.tab)[0];
   $('crumbView').textContent = cur ? cur.label : '';
   $('printMeta').textContent = (cur ? cur.label : '') + ' · updated ' + (GEN.time ? fmtStamp(GEN.time) : DASH);
-  const navKey = ['overview', 'completed', 'edit'].indexOf(state.tab) >= 0 ? state.tab : 'monitored';
+  const navKey = ['overview', 'completed', 'edit', 'tools'].indexOf(state.tab) >= 0 ? state.tab : 'monitored';
   document.querySelectorAll('#nav .nav-item[data-go]').forEach(n => n.classList.toggle('active', n.getAttribute('data-go') === navKey));
 }
 
@@ -1167,8 +1231,17 @@ function render() {
   show('toolbar', onTable);
   show('timeline', t === 'overview');
   show('feeds', t === 'overview');
-  show('objects', t !== 'overview' && t !== 'edit');
+  show('objects', t !== 'overview' && t !== 'edit' && t !== 'tools');
   show('editor', t === 'edit');
+  show('tools', t === 'tools');
+  if (t !== 'tools') clearTimeout(toolsTimer);
+
+  if (t === 'tools') {
+    $('notice').innerHTML = '';
+    renderTools();
+    loadTools();
+    return;
+  }
 
   if (t === 'edit') {
     $('notice').innerHTML = '';
@@ -1238,7 +1311,7 @@ function exportCsv() {
   const blob = new Blob([String.fromCharCode(0xFEFF) + text], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'psToDo-' + (state.tab === 'overview' || state.tab === 'edit' ? 'monitored' : state.tab) + '-' + GEN.y + '-' + pad(GEN.mo + 1) + '-' + pad(GEN.d) + '.csv';
+  a.download = 'psToDo-' + (['overview', 'edit', 'tools'].indexOf(state.tab) >= 0 ? 'monitored' : state.tab) + '-' + GEN.y + '-' + pad(GEN.mo + 1) + '-' + pad(GEN.d) + '.csv';
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
@@ -1248,8 +1321,34 @@ function exportCsv() {
 function setTab(t) { state.tab = t; state.urgency = null; render(); window.scrollTo(0, 0); }
 
 $('filter').addEventListener('input', e => { state.filter = e.target.value; render(); });
-$('export').addEventListener('click', exportCsv);
-$('print').addEventListener('click', () => window.print());
+$('export').addEventListener('click', () => { closeOther(); exportCsv(); });
+$('print').addEventListener('click', () => { closeOther(); window.print(); });
+
+// "Other" menu next to the sidebar
+function openOther() {
+  const btn = $('navOther'), menu = $('otherMenu'), r = btn.getBoundingClientRect();
+  menu.hidden = false;
+  menu.style.left = (r.right + 6) + 'px';
+  menu.style.top = Math.max(8, Math.min(r.top, window.innerHeight - menu.offsetHeight - 8)) + 'px';
+  btn.setAttribute('aria-expanded', 'true');
+  menu.querySelector('button').focus();
+}
+function closeOther(refocus) {
+  if ($('otherMenu').hidden) return;
+  $('otherMenu').hidden = true;
+  $('navOther').setAttribute('aria-expanded', 'false');
+  if (refocus) $('navOther').focus();
+}
+$('navOther').addEventListener('click', e => { e.stopPropagation(); if ($('otherMenu').hidden) openOther(); else closeOther(); });
+$('otherMenu').addEventListener('keydown', e => {
+  const items = Array.from($('otherMenu').querySelectorAll('button')), i = items.indexOf(document.activeElement);
+  if (e.key === 'Escape') { e.preventDefault(); closeOther(true); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+  else if (e.key === 'Tab') closeOther();
+});
+document.addEventListener('click', e => { if (!e.target.closest('#otherMenu')) closeOther(); });
+window.addEventListener('resize', () => closeOther());
 $('reset').addEventListener('click', () => {
   state = Object.assign({}, DEFAULTS, { tab: state.tab });
   openRows.clear();
@@ -1385,8 +1484,7 @@ window.addEventListener('beforeprint', () => { if (state.tab === 'overview') ren
 
 function enableEditing() {
   CAN_EDIT = true;
-  $('navEditor').hidden = false; $('navSep').hidden = false;
-  $('actEdit').hidden = false;
+  $('navEditor').hidden = false; $('navTools').hidden = false; $('navSep').hidden = false;
   render();
 }
 
@@ -1426,8 +1524,199 @@ document.addEventListener('click', e => {
   e.preventDefault();
   openEditor(a.getAttribute('data-id'));
 });
-$('actEdit').addEventListener('click', () => openEditor());
 window.addEventListener('resize', sizeEditor);
+
+// ------------------------------------------------------------------ tools
+// Tools are ordered through psToDo-api.ashx and run by psToDo-Tools-v1.0.ps1 (scheduled task).
+const TOOLS_URL = EDITOR ? EDITOR.replace(/[^\/]*$/, '') + 'psToDo-api.ashx' : '';
+let toolsState = null, toolsError = '', toolsTimer = null, confirmKey = '';
+let cardsSig = '', runsSig = '';
+const openLogs = {}, logText = {}, ordered = {};
+
+function api(method, action, body, query) {
+  const headers = { 'Accept': 'application/json' };
+  if (body) { headers['Content-Type'] = 'application/json'; headers['X-psToDo-Request'] = '1'; }
+  return fetch(TOOLS_URL + '?action=' + action + (query || ''), { method: method, credentials: 'same-origin', cache: 'no-store', headers: headers, body: body ? JSON.stringify(body) : undefined })
+    .then(res => res.json().catch(() => ({})).then(d => { if (!res.ok) throw new Error(d.message || ('HTTP ' + res.status)); return d; }));
+}
+function loadTools() {
+  clearTimeout(toolsTimer);
+  return api('GET', 'tools')
+    .then(d => { toolsState = d; toolsError = ''; }, e => { toolsError = e.message; })
+    .then(() => {
+      if (state.tab !== 'tools') return;
+      renderTools();
+      (toolsState ? toolsState.runs || [] : []).forEach(r => { if (openLogs[r.id] && (r.status === 'running' || logText[r.id] === undefined)) loadLog(r.id); });
+      const active = toolsState && (toolsState.runs || []).some(r => r.status === 'queued' || r.status === 'running');
+      toolsTimer = setTimeout(loadTools, active ? 4000 : 30000);
+    });
+}
+function loadLog(id) {
+  api('GET', 'runlog', null, '&id=' + encodeURIComponent(id)).then(d => { logText[id] = d.log || ''; }, e => { logText[id] = 'Could not load the output: ' + e.message; })
+    .then(() => { const pre = document.querySelector('pre.log[data-log="' + id + '"]'); if (pre) { pre.textContent = logText[id] || '(no output yet)'; } });
+}
+const isoDate = t => { const ms = Date.parse(t || ''); return isNaN(ms) ? null : new Date(ms); };
+const ago = sec => (sec < 90 ? Math.round(sec) + ' s ago' : sec < 5400 ? Math.round(sec / 60) + ' min ago' : Math.round(sec / 3600) + ' h ago');
+const ST_LABEL = { queued: 'Queued', running: 'Running', ok: 'Done', failed: 'Failed', timeout: 'Timed out', rejected: 'Rejected' };
+function statusBadgeRun(st) {
+  const icon = st === 'running' ? '<span class="spin"></span>' : st === 'ok' ? glyph('ok') : st === 'failed' || st === 'timeout' ? glyph('expired') : st === 'rejected' ? glyph('warning') : '';
+  return '<span class="st ' + esc(st) + '">' + icon + esc(ST_LABEL[st] || st) + '</span>';
+}
+function argText(r) {
+  const a = r.args || {}, parts = [];
+  if (a.objectId) { const o = DATA.concat(COMPLETED).filter(x => String(x.id) === String(a.objectId))[0]; parts.push('object ' + a.objectId + (o ? ' – ' + o.name : '')); }
+  if (a.channel) parts.push(a.channel);
+  if (a.to) parts.push('to ' + a.to);
+  return parts.join(' · ');
+}
+
+function toolCardHtml(t) {
+  const objects = monitored().concat(COMPLETED).filter(o => o.id !== undefined && o.id !== '');
+  const args = (t.args || []).map(a => {
+    const idAttr = 'arg-' + t.id + '-' + a.name;
+    let input = '';
+    if (a.type === 'object') input = '<select id="' + idAttr + '" data-arg="' + esc(a.name) + '"><option value="">Choose an object…</option>' +
+      objects.map(o => '<option value="' + esc(o.id) + '">' + esc(o.id + ' – ' + o.name) + '</option>').join('') + '</select>';
+    else if (a.type === 'choice') input = '<select id="' + idAttr + '" data-arg="' + esc(a.name) + '">' + (a.options || []).map(o => '<option>' + esc(o) + '</option>').join('') + '</select>';
+    else input = '<input id="' + idAttr + '" data-arg="' + esc(a.name) + '" type="' + (a.type === 'email' ? 'email' : 'text') + '" maxlength="254" autocomplete="off"' +
+      (a.type === 'email' ? ' placeholder="name@example.com"' : '') + (a.optional ? '' : ' required') + '>';
+    return '<div><label for="' + idAttr + '">' + esc(a.label || a.name) + '</label>' + input + '</div>';
+  }).join('');
+  return '<div class="tool" data-tool="' + esc(t.id) + '"><b>' + esc(t.label) + '</b><div class="tool-desc">' + esc(t.description) + '</div>' +
+    (args ? '<div class="tool-args">' + args + '</div>' : '') +
+    '<div class="tool-foot" data-foot="' + esc(t.id) + '"></div><div class="tool-last" data-last="' + esc(t.id) + '"></div></div>';
+}
+function toolFootHtml(t, msg, bad) {
+  const asking = confirmKey === 'tool:' + t.id;
+  return '<button class="btn primary" data-run="' + esc(t.id) + '">' + (asking ? 'Confirm' : 'Run') + '</button>' +
+    (asking ? '<button class="btn" data-cancel="1">Cancel</button><span class="tool-msg">' + esc(t.confirm) + '</span>' : '') +
+    (msg ? '<span class="tool-msg' + (bad ? ' bad' : '') + '">' + esc(msg) + '</span>' : '');
+}
+function setFoot(id, msg, bad) {
+  const t = toolById(id), el = document.querySelector('[data-foot="' + id + '"]');
+  if (t && el) el.innerHTML = toolFootHtml(t, msg, bad);
+}
+const toolById = id => ((toolsState && toolsState.runner && toolsState.runner.tools) || []).filter(t => t.id === id)[0];
+
+function renderTools() {
+  const s = toolsState, runner = s && s.runner, tools = (runner && runner.tools) || [];
+  const runs = (s && s.runs) || [];
+
+  // Notices
+  let notice = '';
+  if (toolsError) notice += '<div class="banner bad" role="alert">' + ICON.warn + '<div><b>Tools could not be loaded.</b> ' + esc(toolsError) + '</div></div>';
+  else if (s && !runner) notice += '<div class="banner" role="alert">' + ICON.warn + '<div><b>The tools task has not run yet.</b> Run <span class="mono">Install-help\\Setup-ToolsRunner.ps1</span> on the server. It creates the scheduled task that runs what you order here.</div></div>';
+  else if (s && s.runnerAgeSeconds > 180) notice += '<div class="banner" role="alert">' + ICON.warn + '<div><b>The tools task was last seen ' + ago(s.runnerAgeSeconds) + '.</b> Orders wait in the queue until it runs again. Check the scheduled task on ' + esc(runner.host || 'the server') + '.</div></div>';
+  const rebuilt = runs.filter(r => r.status === 'ok' && (r.tool === 'rebuild' || /^import-/.test(r.tool || '')) && GEN.time && isoDate(r.finishedAt) > GEN.time)[0];
+  if (rebuilt) notice += '<div class="banner info"><div><b>The dashboard has been rebuilt since this page was loaded.</b> <button class="btn" id="toolsReload">Reload the page</button></div></div>';
+  if ($('toolsNotice').innerHTML !== notice) $('toolsNotice').innerHTML = notice;
+  $('runnerInfo').textContent = runner && s.runnerAgeSeconds >= 0 ? 'Tools task seen ' + ago(s.runnerAgeSeconds) + (runner.host ? ' on ' + runner.host : '') : '';
+
+  // Cards: only rebuilt when the tool list changes, so what you typed stays
+  const sig = JSON.stringify(tools.map(t => [t.id, t.group, t.label, t.description, t.confirm, (t.args || []).map(a => [a.name, a.type, a.label, a.optional, (a.options || []).join()])])) + '|' + monitored().length;
+  if (sig !== cardsSig) {
+    cardsSig = sig;
+    const groups = [];
+    tools.forEach(t => { if (groups.indexOf(t.group || '') < 0) groups.push(t.group || ''); });
+    $('toolCards').innerHTML = tools.length
+      ? groups.map(g => '<div class="tool-group">' + esc(g) + '</div><div class="tool-grid">' + tools.filter(t => (t.group || '') === g).map(toolCardHtml).join('') + '</div>').join('')
+      : '<div class="empty">' + (s ? 'No tools yet.' : 'Loading…') + '</div>';
+    tools.forEach(t => setFoot(t.id));
+  }
+  tools.forEach(t => {
+    const last = runs.filter(r => r.tool === t.id)[0], el = document.querySelector('[data-last="' + t.id + '"]');
+    if (!el) return;
+    if (ordered[t.id] && last && last.id === ordered[t.id] && last.status !== 'queued') { delete ordered[t.id]; setFoot(t.id); }
+    const html = last ? 'Last run ' + esc(fmtStamp(isoDate(last.requestedAt))) + ' · ' + statusBadgeRun(last.status) + (last.summary ? ' · ' + esc(last.summary) : '') : 'Not run yet';
+    if (el.innerHTML !== html) el.innerHTML = html;
+  });
+
+  // Runs
+  const rsig = JSON.stringify(runs) + '|' + Object.keys(openLogs).filter(k => openLogs[k]).join(',');
+  if (rsig !== runsSig) {
+    runsSig = rsig;
+    $('runsCount').textContent = runs.length ? plural(runs.length, 'run') : '';
+    const cols = [{ label: 'Ordered', w: 130 }, { label: 'Tool' }, { label: 'By', w: 160 }, { label: 'Status', w: 120 }, { label: 'Result', w: 380 }, { label: '', w: 90 }];
+    $('toolRuns').innerHTML = runs.length ? '<table class="grid small">' + headHtml(cols, false) + '<tbody>' + runs.map(r => {
+      const t = toolById(r.tool), open = !!openLogs[r.id];
+      return '<tr><td>' + esc(fmtStamp(isoDate(r.requestedAt))) + '</td>' +
+        '<td class="name"><div class="ell">' + esc(r.label || (t ? t.label : r.tool)) + '</div>' + (argText(r) ? '<div class="sub ell" title="' + esc(argText(r)) + '">' + esc(argText(r)) + '</div>' : '') + '</td>' +
+        '<td><div class="ell" title="' + esc(r.requestedBy) + '">' + esc(r.requestedBy) + '</div></td>' +
+        '<td>' + statusBadgeRun(r.status) + '</td>' +
+        '<td><div class="ell" title="' + esc(r.summary) + '">' + esc(r.summary || (r.status === 'queued' ? 'Waiting for the tools task' : '')) + '</div></td>' +
+        '<td>' + (r.status === 'queued' ? '' : '<button class="link-btn" data-log="' + esc(r.id) + '" aria-expanded="' + open + '">' + (open ? 'Hide output' : 'Output') + '</button>') + '</td></tr>' +
+        (open ? '<tr class="detail"><td colspan="6"><pre class="log" data-log="' + esc(r.id) + '" tabindex="0">' + esc(logText[r.id] === undefined ? 'Loading…' : (logText[r.id] || '(no output yet)')) + '</pre></td></tr>' : '');
+    }).join('') + '</tbody></table>' : '<div class="empty">Nothing has been run yet.</div>';
+  }
+
+  // Backups
+  const backups = (s && s.backups) || [];
+  const bcols = [{ label: 'File' }, { label: 'Saved', w: 130 }, { label: 'Size', w: 80, cls: 'num' }, { label: '', w: 170 }];
+  $('toolBackups').innerHTML = backups.length ? '<table class="grid small" style="min-width:520px">' + headHtml(bcols, false) + '<tbody>' + backups.map(b => {
+    const asking = confirmKey === 'restore:' + b.file;
+    return '<tr><td><div class="ell mono" title="' + esc(b.file) + '">' + esc(b.file) + '</div></td><td>' + esc(fmtStamp(isoDate(b.modified))) + '</td>' +
+      '<td class="num">' + Math.max(1, Math.round(b.size / 1024)) + ' KB</td>' +
+      '<td>' + (asking ? '<button class="btn danger" data-restore="' + esc(b.file) + '">Confirm</button> <button class="btn" data-cancel="1">Cancel</button>'
+                       : '<button class="btn" data-restore="' + esc(b.file) + '">Restore</button>') + '</td></tr>';
+  }).join('') + '</tbody></table>' : '<div class="empty">' + (s ? 'No backups yet.' : '') + '</div>';
+
+  // Edit log
+  const saves = (s && s.saves) || [];
+  $('toolSaves').innerHTML = saves.length ? saves.map(line => {
+    const m = /^(\d{4}-\d\d-\d\d \d\d:\d\d):\d\d\s+(.*)$/.exec(line);
+    return '<li>' + (m ? '<div class="when">' + esc(m[1]) + '</div>' + esc(m[2]) : esc(line)) + '</li>';
+  }).join('') : '<li class="muted">' + (s ? 'Nothing logged yet.' : '') + '</li>';
+}
+
+function orderTool(id, args) {
+  setFoot(id, 'Ordering…');
+  return api('POST', 'run', { tool: id, args: args || {} })
+    .then(d => { ordered[id] = d.id; setFoot(id, d.duplicate ? 'Already in the queue.' : 'Ordered. It starts within a minute.'); runsSig = ''; return loadTools(); },
+          e => { setFoot(id, e.message, true); });
+}
+$('tools').addEventListener('click', e => {
+  if (e.target.closest('#toolsReload')) { location.reload(); return; }
+  if (e.target.closest('#toolsRefresh')) { loadTools(); return; }
+  if (e.target.closest('[data-cancel]')) { const k = confirmKey; confirmKey = ''; if (k.indexOf('tool:') === 0) setFoot(k.slice(5)); renderTools(); return; }
+  const run = e.target.closest('[data-run]');
+  if (run) {
+    const id = run.getAttribute('data-run'), t = toolById(id), card = run.closest('.tool'), args = {};
+    if (!t) return;
+    let missing = '';
+    card.querySelectorAll('[data-arg]').forEach(el => {
+      const spec = (t.args || []).filter(a => a.name === el.getAttribute('data-arg'))[0] || {};
+      const v = el.value.trim();
+      if (!v && !spec.optional) missing = spec.label || spec.name;
+      if (v && spec.type === 'email' && !el.checkValidity()) missing = 'a valid e-mail address';
+      if (v) args[spec.name] = v;
+    });
+    if (missing) { confirmKey = ''; setFoot(id, 'Fill in: ' + missing + '.', true); return; }
+    if (t.confirm && confirmKey !== 'tool:' + id) { confirmKey = 'tool:' + id; setFoot(id); return; }
+    confirmKey = '';
+    orderTool(id, args);
+    return;
+  }
+  const log = e.target.closest('button[data-log]');
+  if (log) {
+    const id = log.getAttribute('data-log');
+    openLogs[id] = !openLogs[id];
+    renderTools();
+    if (openLogs[id]) loadLog(id);
+    return;
+  }
+  const restore = e.target.closest('[data-restore]');
+  if (restore) {
+    const file = restore.getAttribute('data-restore');
+    if (confirmKey !== 'restore:' + file) { confirmKey = 'restore:' + file; renderTools(); return; }
+    confirmKey = '';
+    $('restoreMsg').className = 'tool-msg'; $('restoreMsg').textContent = 'Restoring…';
+    api('POST', 'restore', { file: file })
+      .then(d => { $('restoreMsg').textContent = 'Restored ' + plural(d.count, 'object') + '. Updating the dashboard…'; return orderTool('rebuild'); },
+            e => { $('restoreMsg').className = 'tool-msg bad'; $('restoreMsg').textContent = e.message; })
+      .then(() => loadTools());
+  }
+});
+$('editRebuild').addEventListener('click', () => { setTab('tools'); orderTool('rebuild'); });
 
 // Theme
 const MOON = '<svg class="i" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>';
@@ -1441,9 +1730,7 @@ function applyTheme(t) {
   if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
   else document.documentElement.removeAttribute('data-theme');
   const dark = effectiveTheme() === 'dark';
-  $('themeBtn').innerHTML = dark ? SUN : MOON;
-  $('themeBtn').title = dark ? 'Light theme' : 'Dark theme';
-  $('themeBtn').setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
+  $('themeBtn').innerHTML = (dark ? SUN : MOON) + (dark ? 'Light theme' : 'Dark theme');
 }
 $('themeBtn').addEventListener('click', () => {
   const next = effectiveTheme() === 'dark' ? 'light' : 'dark';

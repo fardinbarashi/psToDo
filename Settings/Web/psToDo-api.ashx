@@ -5,6 +5,12 @@
 //   GET  ?action=load   -> {"version","canEdit","user","editorsGroup","data":[...]}
 //   GET  ?action=whoami -> {"canEdit","user"}
 //   POST ?action=save   -> body {"version","json"}
+// Tools (editors only). Scripts are never run here: a request file is written to the
+// queue folder and psToDo-Tools-v1.0.ps1 (scheduled task) runs it.
+//   GET  ?action=tools          -> runner, runs, backups, recent saves
+//   POST ?action=run            -> body {"tool","args":{}}
+//   GET  ?action=runlog&id=...  -> output of one run
+//   POST ?action=restore        -> body {"file"}  (a backup of monitorobjects.json)
 // Saving: members of appSettings psToDo:EditorsGroup only. Version check (409 on
 // conflict), backup before write, edit log. POST needs X-psToDo-Request: 1 and JSON.
 // .NET Framework 4.x / C# 5.
@@ -50,8 +56,12 @@ public class PsToDoApi : IHttpHandler
             if (action == "load" && method == "GET") { Load(ctx); return; }
             if (action == "whoami" && method == "GET") { WhoAmI(ctx); return; }
             if (action == "save" && method == "POST") { Save(ctx); return; }
+            if (action == "tools" && method == "GET") { Tools(ctx); return; }
+            if (action == "runlog" && method == "GET") { RunLog(ctx); return; }
+            if (action == "run" && method == "POST") { Run(ctx); return; }
+            if (action == "restore" && method == "POST") { Restore(ctx); return; }
 
-            Fail(ctx, 405, "bad-request", "Use GET ?action=load, GET ?action=whoami or POST ?action=save.");
+            Fail(ctx, 405, "bad-request", "Unknown action or method.");
         }
         catch (Exception ex)
         {
@@ -107,23 +117,25 @@ public class PsToDoApi : IHttpHandler
 
     // ------------------------------------------------------------------ save
 
-    private void Save(HttpContext ctx)
+    private static bool RequireEditor(HttpContext ctx)
     {
-        if (!CanEdit(ctx))
-        {
-            string g = EditorsGroup();
-            Fail(ctx, 403, "not-editor", g.Length == 0
-                ? "Saving is turned off: no editors group is configured (appSettings psToDo:EditorsGroup)."
-                : ctx.User.Identity.Name + " is not a member of " + g + ". Sign out and in again after being added.");
-            return;
-        }
+        if (CanEdit(ctx)) return true;
+        string g = EditorsGroup();
+        Fail(ctx, 403, "not-editor", g.Length == 0
+            ? "Saving is turned off: no editors group is configured (appSettings psToDo:EditorsGroup)."
+            : ctx.User.Identity.Name + " is not a member of " + g + ". Sign out and in again after being added.");
+        return false;
+    }
 
+    // Checks a POST (CSRF header, JSON, same origin, size) and returns the body as an object, or null after Fail
+    private static Dictionary<string, object> ReadPost(HttpContext ctx)
+    {
         // CSRF
         if (ctx.Request.Headers["X-psToDo-Request"] != "1" ||
             !(ctx.Request.ContentType ?? "").StartsWith("application/json", StringComparison.OrdinalIgnoreCase))
         {
             Fail(ctx, 400, "bad-request", "Missing X-psToDo-Request header or JSON content type.");
-            return;
+            return null;
         }
         // Same origin
         string origin = ctx.Request.Headers["Origin"];
@@ -136,35 +148,51 @@ public class PsToDoApi : IHttpHandler
                 !string.Equals(o.Authority, host, StringComparison.OrdinalIgnoreCase))
             {
                 Fail(ctx, 403, "bad-origin", "Cross-site requests are not allowed.");
-                return;
+                return null;
             }
         }
         if (ctx.Request.ContentLength > MaxBodyBytes)
         {
             Fail(ctx, 413, "too-large", "The request is larger than " + (MaxBodyBytes / 1024 / 1024) + " MB.");
-            return;
+            return null;
         }
 
         string body;
         using (var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8)) { body = reader.ReadToEnd(); }
 
-        var js = Serializer();
         Dictionary<string, object> req;
-        try { req = js.DeserializeObject(body) as Dictionary<string, object>; }
-        catch (Exception ex) { Fail(ctx, 400, "bad-json", "The request body is not valid JSON: " + ex.Message); return; }
-        if (req == null || !(req.ContainsKey("json") && req["json"] is string))
+        try { req = Serializer().DeserializeObject(body) as Dictionary<string, object>; }
+        catch (Exception ex) { Fail(ctx, 400, "bad-json", "The request body is not valid JSON: " + ex.Message); return null; }
+        if (req == null) { Fail(ctx, 400, "bad-request", "The request body must be a JSON object."); return null; }
+        return req;
+    }
+
+    private void Save(HttpContext ctx)
+    {
+        if (!RequireEditor(ctx)) return;
+        Dictionary<string, object> req = ReadPost(ctx);
+        if (req == null) return;
+        if (!(req.ContainsKey("json") && req["json"] is string))
         {
             Fail(ctx, 400, "bad-request", "Expected {\"version\":\"...\",\"json\":\"...\"}.");
             return;
         }
         string baseVersion = req.ContainsKey("version") ? Convert.ToString(req["version"], CultureInfo.InvariantCulture) : "";
-        string newText = ((string)req["json"]).Trim();
+        Commit(ctx, ((string)req["json"]).Trim(), baseVersion, "saved", "", true);
+    }
 
+    // Validates the new content and writes monitorobjects.json (backup first).
+    // baseVersion null = no version check. checkFields false = only the structure is checked
+    // (a restore must work even if the backup holds a bad date).
+    private void Commit(HttpContext ctx, string newText, string baseVersion, string verb, string source, bool checkFields)
+    {
         object parsedNew;
-        try { parsedNew = js.DeserializeObject(newText); }
+        try { parsedNew = Serializer().DeserializeObject(newText); }
         catch (Exception ex) { Fail(ctx, 400, "bad-json", "The new content is not valid JSON: " + ex.Message); return; }
-        var errors = Validate(parsedNew as object[]);
+        var errors = checkFields ? Validate(parsedNew as object[]) : new List<string>();
         if (!(parsedNew is object[])) errors.Insert(0, "The content must be a JSON array of objects.");
+        else foreach (object item in (object[])parsedNew)
+            if (!(item is Dictionary<string, object>)) { if (errors.Count == 0) errors.Add("The content must be a JSON array of objects."); break; }
         if (errors.Count > 0)
         {
             Fail(ctx, 400, "invalid", "The data was not saved: " + string.Join(" | ", errors.ToArray()));
@@ -183,7 +211,7 @@ public class PsToDoApi : IHttpHandler
         {
             byte[] current = File.Exists(dbPath) ? File.ReadAllBytes(dbPath) : new byte[0];
             string currentVersion = Hash(current);
-            if (!string.Equals(baseVersion, currentVersion, StringComparison.OrdinalIgnoreCase))
+            if (baseVersion != null && !string.Equals(baseVersion, currentVersion, StringComparison.OrdinalIgnoreCase))
             {
                 ctx.Response.StatusCode = 409;
                 ctx.Response.Write("{\"error\":\"conflict\",\"message\":" +
@@ -232,12 +260,243 @@ public class PsToDoApi : IHttpHandler
             newVersion = Hash(newBytes);
         }
 
-        Audit(ctx, user + " saved " + newCount + " object(s) (was " + (oldCount < 0 ? "?" : oldCount.ToString(CultureInfo.InvariantCulture)) +
+        Audit(ctx, user + " " + verb + " " + newCount + " object(s)" + (source.Length == 0 ? "" : " from " + source) +
+                   " (was " + (oldCount < 0 ? "?" : oldCount.ToString(CultureInfo.InvariantCulture)) +
                    "). Backup: " + (backupName.Length == 0 ? "(none - file was new)" : backupName));
 
         ctx.Response.StatusCode = 200;
         ctx.Response.Write("{\"version\":" + Q(newVersion) + ",\"backup\":" + Q(backupName) +
                            ",\"count\":" + newCount.ToString(CultureInfo.InvariantCulture) + "}");
+    }
+
+    // ------------------------------------------------------------------ tools
+
+    private const int MaxPending = 20;
+    private const int MaxListed = 30;
+
+    private static string QueueFolder(HttpContext ctx) { return Resolve(ctx, Setting("psToDo:QueueFolder", @"..\queue")); }
+
+    private static Dictionary<string, object> ReadJsonFile(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return null;
+            return Serializer().DeserializeObject(DecodeUtf8(File.ReadAllBytes(path))) as Dictionary<string, object>;
+        }
+        catch { return null; }
+    }
+
+    private static bool IsRunId(string s)
+    {
+        if (s == null || s.Length != 32) return false;
+        foreach (char c in s) if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+        return true;
+    }
+
+    private static bool IsBackupName(string s)
+    {
+        if (string.IsNullOrEmpty(s) || s.Length > 200 || !s.StartsWith("monitorobjects-", StringComparison.Ordinal) ||
+            !s.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return false;
+        foreach (char c in s) if (!(char.IsLetterOrDigit(c) || c == '-' || c == '_' || c == '.')) return false;
+        return s.IndexOf("..", StringComparison.Ordinal) < 0;
+    }
+
+    private void Tools(HttpContext ctx)
+    {
+        if (!RequireEditor(ctx)) return;
+        string queue = QueueFolder(ctx);
+        var result = new Dictionary<string, object>();
+
+        // Runner heartbeat and tool list (written by psToDo-Tools-v1.0.ps1)
+        Dictionary<string, object> runner = ReadJsonFile(Path.Combine(queue, "runner.json"));
+        result["runner"] = runner;
+        double age = -1;
+        DateTimeOffset seen;
+        if (runner != null && runner.ContainsKey("lastSeen") &&
+            DateTimeOffset.TryParse(Convert.ToString(runner["lastSeen"], CultureInfo.InvariantCulture), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out seen))
+            age = Math.Max(0, (DateTimeOffset.Now - seen).TotalSeconds);
+        result["runnerAgeSeconds"] = Math.Round(age);
+
+        // Queued requests and runs, newest first
+        var runs = new List<Dictionary<string, object>>();
+        string requests = Path.Combine(queue, "requests");
+        if (Directory.Exists(requests))
+            foreach (string f in Directory.GetFiles(requests, "*.json"))
+            {
+                Dictionary<string, object> r = ReadJsonFile(f);
+                if (r == null) continue;
+                r["status"] = "queued";
+                runs.Add(r);
+            }
+        string runDir = Path.Combine(queue, "runs");
+        if (Directory.Exists(runDir))
+            foreach (string f in Directory.GetFiles(runDir, "*.json"))
+            {
+                Dictionary<string, object> r = ReadJsonFile(f);
+                if (r != null) runs.Add(r);
+            }
+        runs.Sort(delegate(Dictionary<string, object> x, Dictionary<string, object> y)
+        {
+            return string.CompareOrdinal(Str(y, "requestedAt"), Str(x, "requestedAt"));
+        });
+        if (runs.Count > MaxListed) runs.RemoveRange(MaxListed, runs.Count - MaxListed);
+        result["runs"] = runs;
+
+        // Backups of monitorobjects.json, newest first
+        var backups = new List<Dictionary<string, object>>();
+        string backupFolder = BackupFolder(ctx);
+        if (Directory.Exists(backupFolder))
+        {
+            var files = new List<FileInfo>(new DirectoryInfo(backupFolder).GetFiles("monitorobjects-*.json"));
+            files.Sort(delegate(FileInfo x, FileInfo y) { return y.LastWriteTimeUtc.CompareTo(x.LastWriteTimeUtc); });
+            foreach (FileInfo f in files)
+            {
+                if (backups.Count >= MaxListed) break;
+                if (!IsBackupName(f.Name)) continue;
+                var b = new Dictionary<string, object>();
+                b["file"] = f.Name;
+                b["modified"] = new DateTimeOffset(f.LastWriteTime).ToString("o", CultureInfo.InvariantCulture);
+                b["size"] = f.Length;
+                backups.Add(b);
+            }
+        }
+        result["backups"] = backups;
+
+        // Last lines of the edit log
+        var saves = new List<string>();
+        try
+        {
+            string log = EditLog(ctx);
+            if (File.Exists(log))
+            {
+                string[] lines = File.ReadAllLines(log, Encoding.UTF8);
+                for (int i = Math.Max(0, lines.Length - 15); i < lines.Length; i++)
+                    if (lines[i].Trim().Length > 0) saves.Add(lines[i]);
+                saves.Reverse();
+            }
+        }
+        catch { }
+        result["saves"] = saves;
+
+        ctx.Response.StatusCode = 200;
+        ctx.Response.Write(Serializer().Serialize(result));
+    }
+
+    private void Run(HttpContext ctx)
+    {
+        if (!RequireEditor(ctx)) return;
+        Dictionary<string, object> req = ReadPost(ctx);
+        if (req == null) return;
+
+        string tool = Str(req, "tool");
+        string queue = QueueFolder(ctx);
+
+        // Only tools the runner has published
+        Dictionary<string, object> runner = ReadJsonFile(Path.Combine(queue, "runner.json"));
+        bool known = false;
+        if (runner != null && runner.ContainsKey("tools") && runner["tools"] is object[])
+            foreach (object t in (object[])runner["tools"])
+            {
+                var d = t as Dictionary<string, object>;
+                if (d != null && Str(d, "id") == tool && tool.Length > 0) known = true;
+            }
+        if (runner == null) { Fail(ctx, 409, "no-runner", "The tools task has not run yet. Set it up with Install-help\\Setup-ToolsRunner.ps1."); return; }
+        if (!known) { Fail(ctx, 400, "unknown-tool", "Unknown tool."); return; }
+
+        // Arguments: a few short strings. The runner checks what they mean.
+        var args = new Dictionary<string, object>();
+        if (req.ContainsKey("args") && req["args"] != null)
+        {
+            var given = req["args"] as Dictionary<string, object>;
+            if (given == null || given.Count > 6) { Fail(ctx, 400, "bad-request", "args must be an object with at most 6 values."); return; }
+            foreach (KeyValuePair<string, object> kv in given)
+            {
+                string v = Convert.ToString(kv.Value, CultureInfo.InvariantCulture) ?? "";
+                bool keyOk = kv.Key.Length > 0 && kv.Key.Length <= 20;
+                foreach (char c in kv.Key) if (!char.IsLetter(c) || c > 'z') keyOk = false;
+                bool valueOk = v.Length <= 300;
+                foreach (char c in v) if (c < 0x20) valueOk = false;
+                if (!keyOk || !valueOk) { Fail(ctx, 400, "bad-request", "An argument name or value is not allowed."); return; }
+                args[kv.Key] = v.Trim();
+            }
+        }
+        string argsJson = Serializer().Serialize(args);
+
+        string requests = Path.Combine(queue, "requests");
+        string id = Guid.NewGuid().ToString("N");
+        string user = ctx.User.Identity.Name;
+
+        lock (FileLock)
+        {
+            Directory.CreateDirectory(requests);
+            string[] pending = Directory.GetFiles(requests, "*.json");
+            foreach (string f in pending)
+            {
+                Dictionary<string, object> p = ReadJsonFile(f);
+                if (p != null && Str(p, "tool") == tool && Serializer().Serialize(p.ContainsKey("args") ? p["args"] : null) == argsJson)
+                {
+                    ctx.Response.StatusCode = 200;
+                    ctx.Response.Write("{\"id\":" + Q(Str(p, "id")) + ",\"duplicate\":true}");
+                    return;
+                }
+            }
+            if (pending.Length >= MaxPending) { Fail(ctx, 429, "queue-full", "There are already " + pending.Length + " requests waiting."); return; }
+
+            var request = new Dictionary<string, object>();
+            request["id"] = id;
+            request["tool"] = tool;
+            request["args"] = args;
+            request["requestedBy"] = user;
+            request["requestedAt"] = DateTimeOffset.Now.ToString("o", CultureInfo.InvariantCulture);
+
+            // Name sorts by time. Written as .tmp first: the runner only reads *.json
+            string name = DateTime.UtcNow.ToString("yyyyMMddHHmmssfff", CultureInfo.InvariantCulture) + "-" + id;
+            string temp = Path.Combine(requests, name + ".tmp");
+            File.WriteAllText(temp, Serializer().Serialize(request), new UTF8Encoding(false));
+            File.Move(temp, Path.Combine(requests, name + ".json"));
+        }
+
+        Audit(ctx, user + " ordered tool " + tool + (args.Count == 0 ? "" : " " + argsJson) + " (run " + id + ")");
+        ctx.Response.StatusCode = 200;
+        ctx.Response.Write("{\"id\":" + Q(id) + ",\"duplicate\":false}");
+    }
+
+    private void RunLog(HttpContext ctx)
+    {
+        if (!RequireEditor(ctx)) return;
+        string id = (ctx.Request.QueryString["id"] ?? "").Trim().ToLowerInvariant();
+        if (!IsRunId(id)) { Fail(ctx, 400, "bad-request", "Unknown run."); return; }
+
+        string path = Path.Combine(Path.Combine(QueueFolder(ctx), "logs"), id + ".txt");
+        string text = "";
+        if (File.Exists(path))
+        {
+            // The last 200 KB
+            using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                const int max = 200 * 1024;
+                if (fs.Length > max) fs.Seek(-max, SeekOrigin.End);
+                using (var r = new StreamReader(fs, Encoding.UTF8, true)) { text = r.ReadToEnd(); }
+            }
+        }
+        ctx.Response.StatusCode = 200;
+        ctx.Response.Write("{\"id\":" + Q(id) + ",\"log\":" + Q(text) + "}");
+    }
+
+    private void Restore(HttpContext ctx)
+    {
+        if (!RequireEditor(ctx)) return;
+        Dictionary<string, object> req = ReadPost(ctx);
+        if (req == null) return;
+
+        string file = Str(req, "file");
+        if (!IsBackupName(file)) { Fail(ctx, 400, "bad-request", "Unknown backup."); return; }
+        string path = Path.Combine(BackupFolder(ctx), file);
+        if (!File.Exists(path)) { Fail(ctx, 404, "not-found", "The backup " + file + " does not exist."); return; }
+
+        string text = DecodeUtf8(File.ReadAllBytes(path)).Trim();
+        if (text.Length == 0) { Fail(ctx, 400, "invalid", "The backup is empty."); return; }
+        Commit(ctx, text, null, "restored", file, false);
     }
 
     // ------------------------------------------------------------------ validation
